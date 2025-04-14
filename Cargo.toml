@@ -1,0 +1,19 @@
+[package]
+name = "rust-template"
+version = "0.1.0"
+edition = "2024"
+
+authors = ["Grant Birkinbine"]
+license = "MIT"
+description = "A Rust repository template"
+readme = "README.md"
+repository = "https://github.com/GrantBirki/rust-template"
+
+keywords = ["rust", "template"]
+categories = ["template"]
+
+
+[dependencies]
+
+[dev-dependencies]
+speculate = "0.1.2"
