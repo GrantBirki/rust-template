@@ -12,9 +12,7 @@ repository = "https://github.com/GrantBirki/rust-template"
 keywords = ["rust", "template"]
 categories = ["template"]
 
-
 [dependencies]
-base64 = "0.22"
 
 [dev-dependencies]
 speculate2 = "=0.2.0"
