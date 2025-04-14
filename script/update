@@ -13,7 +13,7 @@ mv .cargo/config.toml .cargo/config.toml.bak
 trap 'mv .cargo/config.toml.bak .cargo/config.toml' EXIT
 
 cargo update
-cargo vendor vendor/cache/
+cargo vendor $VENDOR_DIR
 
 # Remove the trap after successful execution
 trap - EXIT

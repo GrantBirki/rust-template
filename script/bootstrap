@@ -8,4 +8,10 @@ echo -e "Rust version: ${GREEN}${RUST_VERSION}${OFF}"
 
 # this doesn't really do anything if the project is already vendored...
 # it mostly just shows that the deps are available so the project can be built
-cargo vendor vendor/cache/ --frozen
+cargo vendor $VENDOR_DIR --frozen
+
+# if ci, assert nothing is dirty
+if [ "$CI" = true ]; then
+  git diff --exit-code
+  git diff --cached --exit-code
+fi

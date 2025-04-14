@@ -47,5 +47,8 @@ export PLATFORM
 export VERSION
 export ARCH
 
+VENDOR_DIR="$DIR/vendor/cache"
+export VENDOR_DIR
+
 # make the vendor/cache directory if it doesn't exist
-mkdir -p "$DIR/vendor/cache"
+mkdir -p "$VENDOR_DIR"
