@@ -6,4 +6,15 @@ source script/env "$@"
 
 echo -e "Rust version: ${GREEN}${RUST_VERSION}${OFF}"
 
+# temp rename the .cargo/config.toml file so we can update and re-vendor
+mv .cargo/config.toml .cargo/config.toml.bak
+
+# Ensure the original file is restored on exit or error
+trap 'mv .cargo/config.toml.bak .cargo/config.toml' EXIT
+
+cargo update
 cargo vendor vendor/cache/
+
+# Remove the trap after successful execution
+trap - EXIT
+mv .cargo/config.toml.bak .cargo/config.toml
