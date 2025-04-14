@@ -14,7 +14,7 @@ categories = ["template"]
 
 
 [dependencies]
-github_username_regex = "=0.0.4"
+base64 = "=0.22.0"
 
 [dev-dependencies]
 speculate2 = "=0.2.0"
