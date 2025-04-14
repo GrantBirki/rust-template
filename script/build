@@ -4,4 +4,4 @@ set -e
 
 source script/env "$@"
 
-echo "define your build script here"
+cargo build --release --frozen
