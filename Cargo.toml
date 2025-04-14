@@ -16,4 +16,4 @@ categories = ["template"]
 [dependencies]
 
 [dev-dependencies]
-speculate = "0.1.2"
+speculate2 = "=0.2.0"

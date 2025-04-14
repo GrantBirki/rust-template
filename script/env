@@ -1,0 +1,51 @@
+#! /usr/bin/env bash
+
+set -e # prevent any kind of script failures
+
+# COLORS
+export OFF='\033[0m'
+export RED='\033[0;31m'
+export GREEN='\033[0;32m'
+export BLUE='\033[0;34m'
+export PURPLE='\033[0;35m'
+
+# set RUST_ENV to development (as a default) if not set
+: "${RUST_ENV:=development}"
+
+export RUST_ENV
+
+# set the working directory to the root of the project
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && cd .. && pwd )"
+export DIR
+
+# The name of the repository is the name of the directory (usually)
+REPO_NAME=$(basename "$PWD")
+export REPO_NAME
+
+TARBALL_DIR="$DIR/tarballs"
+export TARBALL_DIR
+
+# set the rust version to the one specified from the rustc --version command
+RUST_VERSION=$(rustc --version | cut -d ' ' -f2)
+export RUST_VERSION
+
+# detect OS version and architecture
+if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+    PLATFORM="linux"
+    VERSION=$(grep '^VERSION_CODENAME=' /etc/os-release | cut -d '=' -f2 || echo "unknown")
+elif [[ "$OSTYPE" == "darwin"* ]]; then
+    PLATFORM="macos"
+    VERSION=$(sw_vers -productVersion || echo "unknown")
+else
+    PLATFORM="unknown"
+    VERSION="unknown"
+fi
+
+ARCH=$(uname -m || echo "unknown")
+
+export PLATFORM
+export VERSION
+export ARCH
+
+# make the vendor/cache directory if it doesn't exist
+mkdir -p "$DIR/vendor/cache"

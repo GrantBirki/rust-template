@@ -1,0 +1,11 @@
+#! /usr/bin/env bash
+
+set -e # prevent any kind of script failures
+
+source script/env "$@"
+
+echo -e "Rust version: ${GREEN}${RUST_VERSION}${OFF}"
+
+# this doesn't really do anything if the project is already vendored...
+# it mostly just shows that the deps are available so the project can be built
+cargo vendor vendor/cache/
