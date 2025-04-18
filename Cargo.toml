@@ -16,3 +16,6 @@ categories = ["template"]
 
 [dev-dependencies]
 speculate2 = "=0.2.0"
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ["cfg(tarpaulin_include)"] }

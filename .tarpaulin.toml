@@ -1,0 +1,12 @@
+[report]
+fail-under = 90
+
+[output]
+out = ["Html", "Xml", "Json"]
+output-dir = "coverage"
+
+[ignore]
+# Ignore main executable function when calculating coverage requirements
+paths = [
+  "src/main.rs:main"
+]

@@ -4,19 +4,99 @@ set -e
 
 source script/env "$@"
 
+# unless the --coverage or -c or --cov flag is passed, skip coverage and only run `cargo test`
+if [[ "$1" != "--coverage" && "$1" != "-c" && "$1" != "--cov" ]]; then
+  cargo test
+  exit 0
+fi
+
+# Create coverage directory if it doesn't exist
+mkdir -p "$DIR/coverage"
+
+# if tarpaulin is not installed, prompt to install it (if CI is true, auto-install)
+if ! command -v cargo-tarpaulin >/dev/null 2>&1; then
+  if [ "$CI" = true ]; then
+    echo "cargo-tarpaulin not found. Installing..."
+    cargo install cargo-tarpaulin
+  else
+    echo "cargo-tarpaulin is not installed."
+    read -p "Would you like to install cargo-tarpaulin now? [y/n] " yn
+    case $yn in
+      [Yy]* ) cargo install cargo-tarpaulin ;;
+      * ) echo "Skipping coverage run."; exit 0 ;;
+    esac
+  fi
+fi
+
+# Check if jq is installed
+if ! command -v jq >/dev/null 2>&1; then
+  echo "jq is required for parsing JSON output. Please install jq."
+  if [ "$CI" = true ]; then
+    echo "Installing jq..."
+    # This is a simple approach - in production you might want a more robust installation
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+      brew install jq
+    elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
+      apt-get update && apt-get install -y jq
+    else
+      echo "Unsupported OS for automatic jq installation"
+      exit 1
+    fi
+  else
+    exit 1
+  fi
+fi
+
 # run tests
 echo -e "\n🧪 ${BLUE}Running tests: $(date "+%H:%M:%S")${OFF}\n"
 
+# Run cargo test first to make sure all tests pass
 cargo test && test_exit=$? || test_exit=$?
 
-total_coverage=$(cat "$DIR/coverage/total-coverage.txt")
+if [ $test_exit -ne 0 ]; then
+  echo -e "\n❌ ${RED}Tests failed, skipping coverage run${OFF}"
+  exit 1
+fi
 
-if grep -q "100.0" "$DIR/coverage/total-coverage.txt"; then
-  cov_exit=0
-  echo -e "\n✅ Total Coverage: ${GREEN}$total_coverage${OFF}"
+# Run tarpaulin with specific options to improve coverage calculation
+cargo tarpaulin --workspace \
+  --exclude-files="vendor/**/*" \
+  --exclude-files="target/**/*" \
+  --out Html --out Json \
+  --output-dir coverage \
+  && cov_exit=$? || cov_exit=$?
+
+# Extract coverage percentage from the tarpaulin JSON output
+if [ -f "$DIR/coverage/tarpaulin-report.json" ]; then
+  # Parse the coverage from JSON using jq
+  coverage_raw=$(jq -r '.coverage' "$DIR/coverage/tarpaulin-report.json")
+  
+  # Check if the value is already a percentage or a decimal
+  if (( $(echo "$coverage_raw > 1.0" | bc -l) )); then
+    # Already a percentage, format it
+    coverage_value=$(echo "$coverage_raw" | awk '{printf "%.1f", $1}')
+  else
+    # Convert from decimal to percentage
+    coverage_value=$(echo "$coverage_raw * 100" | bc -l | awk '{printf "%.1f", $1}')
+  fi
+  
+  formatted_coverage="${coverage_value}%"
+  
+  # Create the total-coverage.txt file for future reference
+  echo "$formatted_coverage" > "$DIR/coverage/total-coverage.txt"
+  
+  # Check if coverage is at least 90%
+  if (( $(echo "$coverage_value >= 90" | bc -l) )); then
+    cov_exit=0
+    echo -e "\n✅ Total Coverage: ${GREEN}$formatted_coverage${OFF}"
+  else
+    cov_exit=1
+    echo -e "\n❌ Total Coverage: ${RED}$formatted_coverage${OFF}"
+  fi
 else
   cov_exit=1
-  echo -e "\n❌ Total Coverage: ${RED}$total_coverage${OFF}"
+  echo -e "\n❌ ${RED}Coverage report not found!${OFF}"
+  formatted_coverage="0.0%"
 fi
 
 echo ""
@@ -26,15 +106,15 @@ echo "---------------------------------------"
 echo ""
 
 if [[ $test_exit == 0 ]]; then
-  echo -e "✅ ${GREEN}rspec:    exitcode=${test_exit}${OFF}"
+  echo -e "✅ ${GREEN}tests:    exitcode=${test_exit}${OFF}"
 else
-  echo -e "❌ ${RED}rspec:    exitcode=${test_exit}${OFF}"
+  echo -e "❌ ${RED}tests:    exitcode=${test_exit}${OFF}"
 fi
 
 if [[ $cov_exit == 0 ]]; then
-  echo -e "✅ ${GREEN}coverage: exitcode=${cov_exit}${OFF}"
+  echo -e "✅ ${GREEN}coverage: exitcode=${cov_exit} ($formatted_coverage)${OFF}"
 else
-  echo -e "❌ ${RED}coverage: exitcode=${cov_exit}${OFF}"
+  echo -e "❌ ${RED}coverage: exitcode=${cov_exit} ($formatted_coverage)${OFF}"
 fi
 
 [ "$test_exit" -gt 0 ] && exit 1
