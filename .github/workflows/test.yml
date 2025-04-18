@@ -29,4 +29,4 @@ jobs:
         run: script/bootstrap
 
       - name: test
-        run: script/test --cov
+        run: script/test
