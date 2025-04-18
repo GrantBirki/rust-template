@@ -6,8 +6,7 @@ source script/env "$@"
 
 # unless the --coverage or -c or --cov flag is passed, skip coverage and only run `cargo test`
 if [[ "$1" != "--coverage" && "$1" != "-c" && "$1" != "--cov" ]]; then
-  # Use --frozen to use only what's in Cargo.lock, and exclude specific test files known to cause issues
-  RUSTFLAGS="--cfg skip_vendor_tests" cargo test --frozen
+  cargo test --frozen
   exit $?
 fi
 
