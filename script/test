@@ -85,13 +85,13 @@ if [ -f "$DIR/coverage/tarpaulin-report.json" ]; then
   # Create the total-coverage.txt file for future reference
   echo "$formatted_coverage" > "$DIR/coverage/total-coverage.txt"
   
-  # Check if coverage is at least 90%
-  if (( $(echo "$coverage_value >= 90" | bc -l) )); then
+  # Check if coverage is exactly 100%
+  if (( $(echo "$coverage_value == 100.0" | bc -l) )) || (( $(echo "$coverage_value > 99.9" | bc -l) )); then
     cov_exit=0
     echo -e "\n✅ Total Coverage: ${GREEN}$formatted_coverage${OFF}"
   else
     cov_exit=1
-    echo -e "\n❌ Total Coverage: ${RED}$formatted_coverage${OFF}"
+    echo -e "\n❌ Total Coverage: ${RED}$formatted_coverage${OFF} (must be 100%)"
   fi
 else
   cov_exit=1
