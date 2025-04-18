@@ -28,5 +28,6 @@ jobs:
       - name: bootstrap
         run: script/bootstrap
 
+      # coverage checks are really really slow but they can be added with `script/test --cov`
       - name: test
         run: script/test
