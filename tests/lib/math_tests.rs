@@ -1,5 +1,5 @@
-use speculate2::speculate;
 use rust_template::{add, subtract};
+use speculate2::speculate;
 
 speculate! {
     describe "basic math" {
