@@ -4,7 +4,7 @@ set -e
 
 source script/env "$@"
 
-# run linter
-echo -e "\n🤖 ${BLUE}Running Rubocop: $(date "+%H:%M:%S")${OFF}\n"
-
-bundle exec rubocop -c .rubocop.yml "$@"
+cargo fmt --all -- --check
+cargo clippy --all-targets --all-features -- -D warnings
+cargo verify-project
+cargo doc --no-deps --document-private-items --all-features --workspace
