@@ -62,6 +62,8 @@ fi
 cargo tarpaulin --workspace \
   --exclude-files="vendor/**/*" \
   --exclude-files="target/**/*" \
+  --exclude-files="*/syn/tests/**/*" \
+  --exclude-files="*/.cargo/**/*" \
   --out Html --out Json \
   --output-dir coverage \
   && cov_exit=$? || cov_exit=$?
