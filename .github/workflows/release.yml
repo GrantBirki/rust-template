@@ -194,11 +194,28 @@ jobs:
             cp "$file" dist/merged/
           done < <(find dist -path 'dist/merged' -prune -o -type f ! -name 'checksums.txt' -print0)
 
+          cd dist/merged
+          for file in *; do
+            case "$file" in
+              checksums.txt|*.tar.gz) continue ;;
+            esac
+            if [[ -f "$file" ]]; then
+              chmod +x "$file"
+              tar -czf "${file}.tar.gz" "$file"
+            fi
+          done
+
           if command -v shasum >/dev/null 2>&1; then
-            (cd dist/merged && find . -maxdepth 1 -type f ! -name 'checksums.txt' -print0 | xargs -0 shasum -a 256 > checksums.txt)
+            find . -maxdepth 1 -type f ! -name 'checksums.txt' -print0 | xargs -0 shasum -a 256 > checksums.txt
           else
-            (cd dist/merged && find . -maxdepth 1 -type f ! -name 'checksums.txt' -print0 | xargs -0 sha256sum > checksums.txt)
+            find . -maxdepth 1 -type f ! -name 'checksums.txt' -print0 | xargs -0 sha256sum > checksums.txt
           fi
+
+      - name: show artifact sizes
+        run: |
+          set -euo pipefail
+          echo "Release artifacts (dist/merged):"
+          ls -lah dist/merged
 
       - name: publish release assets
         env:
