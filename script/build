@@ -4,39 +4,54 @@ set -e
 
 source script/env "$@"
 
-MODE=""
-
-for arg in "$@"; do
-  case "$arg" in
-    --size)
-      if [[ -n "$MODE" && "$MODE" != "size" ]]; then
-        echo "error: choose only one of --size or --perf" >&2
-        exit 2
-      fi
-      MODE="size"
-      ;;
-    --perf)
-      if [[ -n "$MODE" && "$MODE" != "perf" ]]; then
-        echo "error: choose only one of --size or --perf" >&2
-        exit 2
-      fi
-      MODE="perf"
-      ;;
-    *)
-      echo "usage: script/build [--perf|--size]" >&2
-      exit 2
-      ;;
-  esac
-done
-
-if [[ -z "$MODE" ]]; then
-  MODE="perf"
+if [[ $# -gt 1 || ( $# -eq 1 && "$1" != "--perf" ) ]]; then
+  echo -e "${RED}usage:${OFF} script/build [--perf]" >&2
+  exit 2
 fi
 
-PROFILE="release"
-if [[ "$MODE" == "size" ]]; then
-  PROFILE="release-small"
+echo -e "${BLUE}Building profile:${OFF} ${PURPLE}release${OFF}"
+cargo build --release --frozen
+
+package_name=$(rg -m1 '^\\s*name\\s*=' "$DIR/Cargo.toml" \
+  | sed -E 's/.*=\\s*"([^"]+)".*/\\1/' \
+  | head -n1)
+
+if [[ -z "$package_name" ]]; then
+  package_name="$REPO_NAME"
 fi
 
-echo "Building profile: ${PROFILE}"
-cargo build --profile "$PROFILE" --frozen
+metadata=$(cargo metadata --no-deps --format-version 1 2>/dev/null || true)
+target_dir=""
+if [[ -n "$metadata" ]]; then
+  target_dir=$(printf '%s' "$metadata" \
+    | rg -m1 -o '"target_directory":"[^"]+"' \
+    | sed -E 's/"target_directory":"//; s/"$//')
+fi
+
+if [[ -z "$target_dir" ]]; then
+  target_dir="$DIR/target"
+fi
+
+exe_suffix=""
+case "$OSTYPE" in
+  msys*|cygwin*|win32*) exe_suffix=".exe" ;;
+esac
+
+binary_path=""
+candidate="$target_dir/release/${package_name}${exe_suffix}"
+if [[ -f "$candidate" ]]; then
+  binary_path="$candidate"
+else
+  fallback=$(find "$target_dir/release" -maxdepth 1 -type f -perm -111 2>/dev/null | head -n1)
+  if [[ -n "$fallback" ]]; then
+    binary_path="$fallback"
+  fi
+fi
+
+if [[ -n "$binary_path" ]]; then
+  binary_size=$(ls -lh "$binary_path" | awk '{print $5}')
+  echo -e "${GREEN}Built binary:${OFF} ${binary_path}"
+  echo -e "${GREEN}Binary size:${OFF} ${binary_size}"
+else
+  echo -e "${RED}warning:${OFF} could not determine built binary path/size" >&2
+fi
