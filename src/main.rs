@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+
 use rust_template::{add, subtract};
 
 // This function is excluded from code coverage
