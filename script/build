@@ -4,4 +4,39 @@ set -e
 
 source script/env "$@"
 
-cargo build --release --frozen
+MODE=""
+
+for arg in "$@"; do
+  case "$arg" in
+    --size)
+      if [[ -n "$MODE" && "$MODE" != "size" ]]; then
+        echo "error: choose only one of --size or --perf" >&2
+        exit 2
+      fi
+      MODE="size"
+      ;;
+    --perf)
+      if [[ -n "$MODE" && "$MODE" != "perf" ]]; then
+        echo "error: choose only one of --size or --perf" >&2
+        exit 2
+      fi
+      MODE="perf"
+      ;;
+    *)
+      echo "usage: script/build [--perf|--size]" >&2
+      exit 2
+      ;;
+  esac
+done
+
+if [[ -z "$MODE" ]]; then
+  MODE="perf"
+fi
+
+PROFILE="release"
+if [[ "$MODE" == "size" ]]; then
+  PROFILE="release-small"
+fi
+
+echo "Building profile: ${PROFILE}"
+cargo build --profile "$PROFILE" --frozen
