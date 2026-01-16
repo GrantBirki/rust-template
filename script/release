@@ -1,24 +1,36 @@
-#!/bin/bash
+#!/usr/bin/env bash
+
+set -euo pipefail
 
 # Usage:
 # script/release
 
-set -e # prevent any kind of script failures
+# COLORS
+OFF='\033[0m'
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+BLUE='\033[0;34m'
 
-source script/env "$@"
+# Get the latest tag, or show "none" if no tags exist
+latest_tag=$(git describe --tags $(git rev-list --tags --max-count=1) 2>/dev/null || echo "none")
+if [[ "$latest_tag" == "none" ]]; then
+  echo -e "No existing tags found. This will be the first release."
+else
+  echo -e "The latest release tag is: ${BLUE}${latest_tag}${OFF}"
+fi
 
-latest_tag=$(git describe --tags "$(git rev-list --tags --max-count=1)")
-echo -e "The latest release tag is: ${BLUE}${latest_tag}${OFF}"
-read -r -p 'New Release Tag (vX.X.X format): ' new_tag
+read -p 'New Release Tag (vX.X.X format): ' new_tag
 
+# Updated regex to allow one or more digits in each segment
 tag_regex='^v[0-9]+\.[0-9]+\.[0-9]+$'
+echo "$new_tag" | grep -E -q $tag_regex
 
-if ! echo "$new_tag" | grep -E "$tag_regex"; then
+if [[ $? -ne 0 ]]; then
   echo -e "${RED}ERROR${OFF} - Tag: $new_tag is not valid. Please use vX.X.X format."
   exit 1
 fi
 
-git tag -a "$new_tag" -m "$new_tag Release"
+git tag -a $new_tag -m "$new_tag Release"
 
 echo -e "${GREEN}OK${OFF} - Tagged: $new_tag"
 
