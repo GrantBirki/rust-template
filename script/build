@@ -4,13 +4,89 @@ set -e
 
 source script/env "$@"
 
-if [[ $# -gt 1 || ( $# -eq 1 && "$1" != "--perf" ) ]]; then
-  echo -e "${RED}usage:${OFF} script/build [--perf]" >&2
-  exit 2
-fi
+usage() {
+  echo -e "${RED}usage:${OFF} script/build [--perf] [--release] [--target <triple>] [--targets <triple,...>] [--dist-dir <dir>] [--universal-darwin]" >&2
+}
 
-echo -e "${BLUE}Building profile:${OFF} ${PURPLE}release${OFF}"
-cargo build --release --frozen
+target_exe_suffix() {
+  case "$1" in
+    *windows*) echo ".exe" ;;
+    *) echo "" ;;
+  esac
+}
+
+target_os() {
+  case "$1" in
+    *-unknown-linux-gnu|*-unknown-linux-musl) echo "linux" ;;
+    *-apple-darwin) echo "darwin" ;;
+    *-pc-windows-gnu|*-pc-windows-msvc) echo "windows" ;;
+    *-unknown-freebsd*) echo "freebsd" ;;
+    *) echo "unknown" ;;
+  esac
+}
+
+target_arch() {
+  case "$1" in
+    x86_64-*) echo "amd64" ;;
+    aarch64-*) echo "arm64" ;;
+    armv7-*) echo "armv7" ;;
+    *) echo "${1%%-*}" ;;
+  esac
+}
+
+release_mode=false
+perf_mode=false
+universal_darwin=false
+dist_dir="$DIR/dist"
+targets=()
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --perf)
+      perf_mode=true
+      ;;
+    --release)
+      release_mode=true
+      ;;
+    --target)
+      if [[ -z "${2:-}" ]]; then
+        usage
+        exit 2
+      fi
+      targets+=("$2")
+      shift
+      ;;
+    --targets)
+      if [[ -z "${2:-}" ]]; then
+        usage
+        exit 2
+      fi
+      IFS=',' read -r -a parsed_targets <<< "$2"
+      targets+=("${parsed_targets[@]}")
+      shift
+      ;;
+    --dist-dir)
+      if [[ -z "${2:-}" ]]; then
+        usage
+        exit 2
+      fi
+      dist_dir="$2"
+      shift
+      ;;
+    --universal-darwin)
+      universal_darwin=true
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      usage
+      exit 2
+      ;;
+  esac
+  shift
+done
 
 package_name=$(rg -m1 '^\\s*name\\s*=' "$DIR/Cargo.toml" \
   | sed -E 's/.*=\\s*"([^"]+)".*/\\1/' \
@@ -32,26 +108,130 @@ if [[ -z "$target_dir" ]]; then
   target_dir="$DIR/target"
 fi
 
-exe_suffix=""
-case "$OSTYPE" in
-  msys*|cygwin*|win32*) exe_suffix=".exe" ;;
-esac
+if [[ "$release_mode" != "true" ]]; then
+  echo -e "${BLUE}Building profile:${OFF} ${PURPLE}release${OFF}"
+  cargo build --release --frozen
 
-binary_path=""
-candidate="$target_dir/release/${package_name}${exe_suffix}"
-if [[ -f "$candidate" ]]; then
-  binary_path="$candidate"
-else
-  fallback=$(find "$target_dir/release" -maxdepth 1 -type f -perm -111 2>/dev/null | head -n1)
-  if [[ -n "$fallback" ]]; then
-    binary_path="$fallback"
+  exe_suffix=""
+  case "$OSTYPE" in
+    msys*|cygwin*|win32*) exe_suffix=".exe" ;;
+  esac
+
+  binary_path=""
+  candidate="$target_dir/release/${package_name}${exe_suffix}"
+  if [[ -f "$candidate" ]]; then
+    binary_path="$candidate"
+  else
+    fallback=$(find "$target_dir/release" -maxdepth 1 -type f -perm -111 2>/dev/null | head -n1)
+    if [[ -n "$fallback" ]]; then
+      binary_path="$fallback"
+    fi
   fi
+
+  if [[ -n "$binary_path" ]]; then
+    binary_size=$(ls -lh "$binary_path" | awk '{print $5}')
+    echo -e "${GREEN}Built binary:${OFF} ${binary_path}"
+    echo -e "${GREEN}Binary size:${OFF} ${binary_size}"
+  else
+    echo -e "${RED}warning:${OFF} could not determine built binary path/size" >&2
+  fi
+  exit 0
 fi
 
-if [[ -n "$binary_path" ]]; then
-  binary_size=$(ls -lh "$binary_path" | awk '{print $5}')
-  echo -e "${GREEN}Built binary:${OFF} ${binary_path}"
-  echo -e "${GREEN}Binary size:${OFF} ${binary_size}"
-else
-  echo -e "${RED}warning:${OFF} could not determine built binary path/size" >&2
+host_target=$(rustc -vV | rg -m1 '^host:' | awk '{print $2}')
+if [[ -z "$host_target" ]]; then
+  host_target=$(rustc -vV | sed -n 's/^host: //p' | head -n1)
 fi
+
+if [[ ${#targets[@]} -eq 0 && -n "${BUILD_TARGETS:-}" ]]; then
+  IFS=',' read -r -a targets <<< "$BUILD_TARGETS"
+fi
+
+if [[ ${#targets[@]} -eq 0 ]]; then
+  targets=("$host_target")
+fi
+
+build_version="${BUILD_VERSION:-}"
+if [[ -z "$build_version" && -n "${GITHUB_REF_NAME:-}" ]]; then
+  build_version="$GITHUB_REF_NAME"
+fi
+if [[ -z "$build_version" ]]; then
+  build_version=$(git describe --tags --abbrev=0 2>/dev/null || true)
+fi
+if [[ -z "$build_version" ]]; then
+  build_version="dev"
+fi
+
+if [[ -d "$dist_dir" ]]; then
+  rm -rf "$dist_dir"/*
+else
+  mkdir -p "$dist_dir"
+fi
+
+for target in "${targets[@]}"; do
+  if [[ -z "$target" ]]; then
+    continue
+  fi
+
+  rustup target add "$target"
+
+  build_cmd=(cargo build)
+  if [[ "$target" != "$host_target" ]]; then
+    if ! command -v cargo-zigbuild >/dev/null 2>&1; then
+      echo -e "${RED}error:${OFF} cargo-zigbuild is required to build ${target} on ${host_target}" >&2
+      exit 1
+    fi
+    if ! command -v zig >/dev/null 2>&1; then
+      echo -e "${RED}error:${OFF} zig is required for cargo-zigbuild" >&2
+      exit 1
+    fi
+    build_cmd=(cargo zigbuild)
+  fi
+
+  "${build_cmd[@]}" --release --frozen --target "$target"
+
+  exe_suffix=$(target_exe_suffix "$target")
+  binary_path="$target_dir/$target/release/${package_name}${exe_suffix}"
+  if [[ ! -f "$binary_path" ]]; then
+    echo -e "${RED}error:${OFF} expected binary not found at ${binary_path}" >&2
+    exit 1
+  fi
+
+  os_name=$(target_os "$target")
+  arch_name=$(target_arch "$target")
+  dist_name="${package_name}_${build_version}_${os_name}-${arch_name}${exe_suffix}"
+
+  cp "$binary_path" "$dist_dir/$dist_name"
+
+  binary_size=$(ls -lh "$binary_path" | awk '{print $5}')
+  echo -e "${GREEN}Built:${OFF} ${dist_name} (${binary_size})"
+done
+
+if [[ "$universal_darwin" == "true" ]]; then
+  if ! command -v lipo >/dev/null 2>&1; then
+    echo -e "${RED}error:${OFF} lipo is required to build a darwin universal binary" >&2
+    exit 1
+  fi
+
+  darwin_x86="$target_dir/x86_64-apple-darwin/release/${package_name}"
+  darwin_arm="$target_dir/aarch64-apple-darwin/release/${package_name}"
+
+  if [[ ! -f "$darwin_x86" || ! -f "$darwin_arm" ]]; then
+    echo -e "${RED}error:${OFF} darwin inputs missing; build x86_64-apple-darwin and aarch64-apple-darwin first" >&2
+    exit 1
+  fi
+
+  universal_name="${package_name}_${build_version}_darwin-universal"
+  lipo -create -output "$dist_dir/$universal_name" "$darwin_x86" "$darwin_arm"
+  echo -e "${GREEN}Built:${OFF} ${universal_name}"
+fi
+
+if command -v shasum >/dev/null 2>&1; then
+  (cd "$dist_dir" && find . -maxdepth 1 -type f ! -name 'checksums.txt' -print0 | xargs -0 shasum -a 256 > checksums.txt)
+elif command -v sha256sum >/dev/null 2>&1; then
+  (cd "$dist_dir" && find . -maxdepth 1 -type f ! -name 'checksums.txt' -print0 | xargs -0 sha256sum > checksums.txt)
+else
+  echo -e "${RED}warning:${OFF} no sha256 tool found; skipping checksums" >&2
+fi
+
+echo -e "${GREEN}Release artifacts:${OFF} ${dist_dir}"
