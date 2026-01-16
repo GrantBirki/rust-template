@@ -20,3 +20,30 @@ A starter template for Rust projects.
 3. Run `script/test` to run the tests (use `--cov` to run with coverage)
 4. Run `script/lint` to run the linter
 5. Run `script/build` to build the project
+6. Run `script/release` to create a new release
+
+## Verifying Release Artifacts
+
+Since the releases are signed using GitHub Artifact Attestations, you can verify the authenticity of the release artifacts using the GitHub CLI.
+
+```console
+$ gh attestation verify --owner grantbirki rust-template_v0.0.3_darwin-arm64
+Loaded digest sha256:bd972559625347da0662076147b4353c13af8aa9ed9b2d4ce48f535c8e2c5a89 for file://rust-template_v0.0.3_darwin-arm64
+Loaded 1 attestation from GitHub API
+
+The following policy criteria will be enforced:
+- Predicate type must match:................ https://slsa.dev/provenance/v1
+- Source Repository Owner URI must match:... https://github.com/grantbirki
+- Subject Alternative Name must match regex: (?i)^https://github.com/grantbirki/
+- OIDC Issuer must match:................... https://token.actions.githubusercontent.com
+
+✓ Verification succeeded!
+
+The following 1 attestation matched the policy criteria
+
+- Attestation #1
+  - Build repo:..... GrantBirki/rust-template
+  - Build workflow:. .github/workflows/release.yml@refs/tags/v0.0.3
+  - Signer repo:.... GrantBirki/rust-template
+  - Signer workflow: .github/workflows/release.yml@refs/tags/v0.0.3
+```
