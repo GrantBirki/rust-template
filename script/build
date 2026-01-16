@@ -8,6 +8,17 @@ usage() {
   echo -e "${RED}usage:${OFF} script/build [--perf] [--release] [--target <triple>] [--targets <triple,...>] [--dist-dir <dir>] [--universal-darwin]" >&2
 }
 
+first_match() {
+  local pattern="$1"
+  local file="$2"
+
+  if command -v rg >/dev/null 2>&1; then
+    rg -m1 "$pattern" "$file"
+  else
+    grep -m1 -E "$pattern" "$file"
+  fi
+}
+
 target_exe_suffix() {
   case "$1" in
     *windows*) echo ".exe" ;;
@@ -88,8 +99,8 @@ while [[ $# -gt 0 ]]; do
   shift
 done
 
-package_name=$(rg -m1 '^\\s*name\\s*=' "$DIR/Cargo.toml" \
-  | sed -E 's/.*=\\s*"([^"]+)".*/\\1/' \
+package_name=$(first_match '^[[:space:]]*name[[:space:]]*=' "$DIR/Cargo.toml" \
+  | sed -E 's/.*=[[:space:]]*"([^"]+)".*/\1/' \
   | head -n1)
 
 if [[ -z "$package_name" ]]; then
@@ -100,8 +111,8 @@ metadata=$(cargo metadata --no-deps --format-version 1 2>/dev/null || true)
 target_dir=""
 if [[ -n "$metadata" ]]; then
   target_dir=$(printf '%s' "$metadata" \
-    | rg -m1 -o '"target_directory":"[^"]+"' \
-    | sed -E 's/"target_directory":"//; s/"$//')
+    | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p' \
+    | head -n1)
 fi
 
 if [[ -z "$target_dir" ]]; then
@@ -138,10 +149,7 @@ if [[ "$release_mode" != "true" ]]; then
   exit 0
 fi
 
-host_target=$(rustc -vV | rg -m1 '^host:' | awk '{print $2}')
-if [[ -z "$host_target" ]]; then
-  host_target=$(rustc -vV | sed -n 's/^host: //p' | head -n1)
-fi
+host_target=$(rustc -vV | awk -F': ' '/^host: /{print $2; exit}')
 
 if [[ ${#targets[@]} -eq 0 && -n "${BUILD_TARGETS:-}" ]]; then
   IFS=',' read -r -a targets <<< "$BUILD_TARGETS"

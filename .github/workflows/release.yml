@@ -60,7 +60,11 @@ jobs:
             echo "${zig_shasum}  ${tarball}" | sha256sum -c -
           fi
           tar -xJf "$tarball"
-          sudo mv "zig-${zig_arch}-${zig_os}-${ZIG_VERSION}/zig" /usr/local/bin/zig
+          zig_root="${RUNNER_TEMP:-/tmp}/zig-${zig_arch}-${zig_os}-${ZIG_VERSION}"
+          rm -rf "$zig_root"
+          mv "zig-${zig_arch}-${zig_os}-${ZIG_VERSION}" "$zig_root"
+          echo "$zig_root" >> "$GITHUB_PATH"
+          export PATH="$zig_root:$PATH"
           zig version
 
       - name: install cargo-zigbuild
@@ -134,7 +138,11 @@ jobs:
             echo "${zig_shasum}  ${tarball}" | sha256sum -c -
           fi
           tar -xJf "$tarball"
-          sudo mv "zig-${zig_arch}-${zig_os}-${ZIG_VERSION}/zig" /usr/local/bin/zig
+          zig_root="${RUNNER_TEMP:-/tmp}/zig-${zig_arch}-${zig_os}-${ZIG_VERSION}"
+          rm -rf "$zig_root"
+          mv "zig-${zig_arch}-${zig_os}-${ZIG_VERSION}" "$zig_root"
+          echo "$zig_root" >> "$GITHUB_PATH"
+          export PATH="$zig_root:$PATH"
           zig version
 
       - name: install cargo-zigbuild
