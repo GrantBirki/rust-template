@@ -9,6 +9,10 @@ export GREEN='\033[0;32m'
 export BLUE='\033[0;34m'
 export PURPLE='\033[0;35m'
 
+# Default to air-gapped cargo/rustup behavior.
+export CARGO_NET_OFFLINE=true
+export RUSTUP_OFFLINE=1
+
 # set RUST_ENV to development (as a default) if not set
 : "${RUST_ENV:=development}"
 

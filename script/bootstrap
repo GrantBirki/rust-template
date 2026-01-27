@@ -6,10 +6,32 @@ source script/env "$@"
 
 echo -e "Rust version: ${GREEN}${RUST_VERSION}${OFF}"
 
-# this doesn't really do anything if the project is already vendored...
-# it mostly just shows that the deps are available so the project can be built
+toolchain_version=$(sed -n 's/^channel[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' "$DIR/rust-toolchain.toml" | head -n1)
+if [[ -n "$toolchain_version" && "$RUST_VERSION" != "$toolchain_version" ]]; then
+  echo -e "${RED}error:${OFF} rust toolchain mismatch (expected ${toolchain_version}, found ${RUST_VERSION})" >&2
+  exit 1
+fi
+if [[ -f "$DIR/.rust-version" && -n "$toolchain_version" ]]; then
+  rust_version_file=$(head -n1 "$DIR/.rust-version" | tr -d '[:space:]')
+  if [[ -n "$rust_version_file" && "$rust_version_file" != "$toolchain_version" ]]; then
+    echo -e "${RED}error:${OFF} .rust-version mismatch (expected ${toolchain_version}, found ${rust_version_file})" >&2
+    exit 1
+  fi
+fi
+
+# Ensure vendored dependencies are present before attempting an offline build.
+if [[ ! -f "$DIR/.cargo/config.toml" ]]; then
+  echo -e "${RED}error:${OFF} missing .cargo/config.toml; vendored sources are required" >&2
+  exit 1
+fi
+
+if [[ ! -d "$VENDOR_DIR" || -z "$(ls -A "$VENDOR_DIR" 2>/dev/null)" ]]; then
+  echo -e "${RED}error:${OFF} vendor cache is empty; run script/update while online to vendor dependencies" >&2
+  exit 1
+fi
+
+# This validates that the deps are available so the project can be built offline.
 cargo check --frozen
-cargo update --frozen
 
 # if ci, assert nothing is dirty
 if [ "$CI" = true ]; then

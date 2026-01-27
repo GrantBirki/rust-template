@@ -9,9 +9,12 @@ A starter template for Rust projects.
 ## Features
 
 - Full dependency vendoring
+- Air-gapped Cargo by default (offline + frozen)
+- Pinned toolchains via `rust-toolchain.toml` + `.rust-version`
 - [Scripts to rule them all](https://github.blog/engineering/scripts-to-rule-them-all/)
 - Basic CI/CD setup
 - Basic testing setup with code coverage
+- Cross-platform build script with macOS universal binaries
 
 ## Getting Started
 
@@ -20,7 +23,18 @@ A starter template for Rust projects.
 3. Run `script/test` to run the tests (use `--cov` to run with coverage)
 4. Run `script/lint` to run the linter
 5. Run `script/build` to build the project
-6. Run `script/release` to create a new release
+6. Run `script/server` to run the app (or CLI)
+7. Run `script/release` to create a new release
+
+## Dependency Updates (Online Only)
+
+Dependency updates are explicit and must be done while online:
+
+```console
+script/update
+```
+
+This refreshes `Cargo.lock` and regenerates `vendor/cache`. All other scripts are offline-by-default.
 
 ## Verifying Release Artifacts
 

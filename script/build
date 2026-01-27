@@ -5,7 +5,7 @@ set -e
 source script/env "$@"
 
 usage() {
-  echo -e "${RED}usage:${OFF} script/build [--perf] [--release] [--target <triple>] [--targets <triple,...>] [--dist-dir <dir>] [--universal-darwin]" >&2
+  echo -e "${RED}usage:${OFF} script/build [--release] [--target <triple>] [--targets <triple,...>] [--dist-dir <dir>] [--universal-darwin]" >&2
 }
 
 first_match() {
@@ -45,17 +45,28 @@ target_arch() {
   esac
 }
 
+assert_tool_version() {
+  local tool="$1"
+  local expected_file="$2"
+  local actual_version="$3"
+
+  if [[ -f "$expected_file" ]]; then
+    local expected
+    expected=$(head -n1 "$expected_file" | tr -d '[:space:]')
+    if [[ -n "$expected" && "$actual_version" != "$expected" ]]; then
+      echo -e "${RED}error:${OFF} ${tool} version mismatch (expected ${expected}, found ${actual_version})" >&2
+      exit 1
+    fi
+  fi
+}
+
 release_mode=false
-perf_mode=false
 universal_darwin=false
 dist_dir="$DIR/dist"
 targets=()
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --perf)
-      perf_mode=true
-      ;;
     --release)
       release_mode=true
       ;;
@@ -170,6 +181,11 @@ if [[ -z "$build_version" ]]; then
   build_version="dev"
 fi
 
+if [[ -z "$dist_dir" || "$dist_dir" == "/" ]]; then
+  echo -e "${RED}error:${OFF} invalid dist directory: ${dist_dir}" >&2
+  exit 1
+fi
+
 if [[ -d "$dist_dir" ]]; then
   rm -rf "$dist_dir"/*
 else
@@ -181,7 +197,18 @@ for target in "${targets[@]}"; do
     continue
   fi
 
-  rustup target add "$target"
+  if [[ "$target" != "$host_target" ]]; then
+    if command -v rustup >/dev/null 2>&1; then
+      if ! rustup target list --installed | grep -qx "$target"; then
+        echo -e "${RED}error:${OFF} rust target not installed: ${target}" >&2
+        echo -e "${RED}hint:${OFF} install the target while online, then re-run the build" >&2
+        exit 1
+      fi
+    else
+      echo -e "${RED}error:${OFF} rustup is required to verify/install cross targets (${target})" >&2
+      exit 1
+    fi
+  fi
 
   build_cmd=(cargo build)
   if [[ "$target" != "$host_target" ]]; then
@@ -193,6 +220,8 @@ for target in "${targets[@]}"; do
       echo -e "${RED}error:${OFF} zig is required for cargo-zigbuild" >&2
       exit 1
     fi
+    assert_tool_version "zig" "$DIR/.zig-version" "$(zig version | head -n1)"
+    assert_tool_version "cargo-zigbuild" "$DIR/.cargo-zigbuild-version" "$(cargo zigbuild --version | awk '{print $2}')"
     build_cmd=(cargo zigbuild)
   fi
 

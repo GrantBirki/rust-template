@@ -13,45 +13,27 @@ fi
 # Create coverage directory if it doesn't exist
 mkdir -p "$DIR/coverage"
 
-# if tarpaulin is not installed, prompt to install it (if CI is true, auto-install)
+# Coverage mode requires preinstalled tools (no network installs).
 if ! command -v cargo-tarpaulin >/dev/null 2>&1; then
-  if [ "$CI" = true ]; then
-    echo "cargo-tarpaulin not found. Installing..."
-    cargo install cargo-tarpaulin
-  else
-    echo "cargo-tarpaulin is not installed."
-    read -p "Would you like to install cargo-tarpaulin now? [y/n] " yn
-    case $yn in
-      [Yy]* ) cargo install cargo-tarpaulin ;;
-      * ) echo "Skipping coverage run."; exit 0 ;;
-    esac
-  fi
+  echo "cargo-tarpaulin is required for coverage runs. Install it before running script/test --cov." >&2
+  exit 1
 fi
 
-# Check if jq is installed
 if ! command -v jq >/dev/null 2>&1; then
-  echo "jq is required for parsing JSON output. Please install jq."
-  if [ "$CI" = true ]; then
-    echo "Installing jq..."
-    # This is a simple approach - in production you might want a more robust installation
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-      brew install jq
-    elif [[ "$OSTYPE" == "linux-gnu"* ]]; then
-      apt-get update && apt-get install -y jq
-    else
-      echo "Unsupported OS for automatic jq installation"
-      exit 1
-    fi
-  else
-    exit 1
-  fi
+  echo "jq is required for parsing JSON coverage output. Install it before running script/test --cov." >&2
+  exit 1
+fi
+
+if ! command -v bc >/dev/null 2>&1; then
+  echo "bc is required for coverage calculations. Install it before running script/test --cov." >&2
+  exit 1
 fi
 
 # run tests
 echo -e "\n🧪 ${BLUE}Running tests: $(date "+%H:%M:%S")${OFF}\n"
 
 # Run cargo test first to make sure all tests pass
-cargo test && test_exit=$? || test_exit=$?
+cargo test --frozen && test_exit=$? || test_exit=$?
 
 if [ $test_exit -ne 0 ]; then
   echo -e "\n❌ ${RED}Tests failed, skipping coverage run${OFF}"

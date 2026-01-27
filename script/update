@@ -4,6 +4,9 @@ set -e # prevent any kind of script failures
 
 source script/env "$@"
 
+unset CARGO_NET_OFFLINE
+unset RUSTUP_OFFLINE
+
 echo -e "Rust version: ${GREEN}${RUST_VERSION}${OFF}"
 
 # temp rename the .cargo/config.toml file so we can update and re-vendor
@@ -13,8 +16,11 @@ mv .cargo/config.toml .cargo/config.toml.bak
 trap 'mv .cargo/config.toml.bak .cargo/config.toml' EXIT
 
 cargo update
-cargo vendor $VENDOR_DIR
+cargo vendor --locked "$VENDOR_DIR"
 
-# Remove the trap after successful execution
+# Restore config before verifying offline build.
 trap - EXIT
 mv .cargo/config.toml.bak .cargo/config.toml
+
+# Verify the updated lockfile + vendor cache work offline.
+cargo check --frozen
