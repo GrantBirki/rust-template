@@ -12,12 +12,12 @@ This repository is a Rust template optimized for hermetic, reproducible, air-gap
 ## Non-Negotiables (Policy)
 
 - No network calls during build/test/lint. If a tool needs the network, it must be moved to `script/update` (online-only) or preinstalled.
-- Release CI is allowed to use `script/install-zig` to fetch Zig + cargo-zigbuild (hermetic enough for releases).
+- Release CI is allowed to use `script/install-zig` to fetch pinned Zig + cargo-zigbuild (hermetic enough for releases).
 - All dependencies are pinned to exact versions in `Cargo.toml` (use `=x.y.z`).
 - `Cargo.lock` is committed and treated as source of truth.
 - Vendored dependencies live in `vendor/cache` and are required for all builds.
 - `rust-toolchain.toml`, `.rust-version`, `.zig-version`, and `.cargo-zigbuild-version` must stay in sync with actual toolchain/tool versions.
-- CI should run air-gapped. Hosted runners that download toolchains are not hermetic.
+- CI should run air-gapped. Hosted runners that download toolchains are not hermetic (release jobs are the only exception via `script/install-zig`).
 
 ## Scripts to Rule Them All
 
@@ -25,7 +25,7 @@ All scripts are in `script/` and are offline-first.
 
 - `script/bootstrap`: validates the toolchain and vendor cache, then performs a frozen build check.
 - `script/update`: **online-only** dependency update + re-vendor. Use this to refresh `Cargo.lock` and `vendor/cache`.
-- `script/install-zig`: **online-only** CI helper that installs Zig + cargo-zigbuild for cross-target releases.
+- `script/install-zig`: **online-only** CI helper that installs pinned Zig + cargo-zigbuild for cross-target releases.
 - `script/test`: runs tests; `--cov` requires preinstalled `cargo-tarpaulin`, `jq`, and `bc`.
 - `script/lint`: format + clippy + docs; treats warnings as errors.
 - `script/build`: builds release binaries (host by default). Use `--release` with `--targets` for dist packaging; supports `--universal-darwin`.
@@ -34,7 +34,7 @@ All scripts are in `script/` and are offline-first.
 
 ## Toolchain + Version Managers
 
-- Rust toolchain is pinned in `rust-toolchain.toml` and `.rust-version`.
+- Rust toolchain is pinned in `rust-toolchain.toml` and mirrored in `.rust-version` (they must match).
 - Cross-compile tooling is pinned in `.zig-version` and `.cargo-zigbuild-version`.
 - Prefer shim-based version managers (mise/asdf/rustup) but **no auto-downloads** in scripts.
 
@@ -60,10 +60,10 @@ If any step requires network access, the build is not hermetic.
 
 ## CI Expectations
 
-CI must be air-gapped:
+CI must be air-gapped for build/test/lint:
 
-- Use self-hosted runners or pre-baked images with Rust, clippy, rustfmt, zig, and cargo-zigbuild preinstalled.
-- Do not download toolchains or tools inside workflows.
+- Prefer self-hosted runners or pre-baked images with Rust, clippy, rustfmt, zig, and cargo-zigbuild preinstalled for full hermeticity.
+- Do not download toolchains or tools inside workflows (except `script/install-zig` in release jobs).
 - Ensure all actions are pinned to commit SHAs.
 - CI should run `script/bootstrap` before any build/test/lint.
 - Offline defaults come from `script/env`, so workflows do not need explicit `CARGO_NET_OFFLINE`/`RUSTUP_OFFLINE` env blocks.
