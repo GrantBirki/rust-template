@@ -12,6 +12,7 @@ This repository is a Rust template optimized for hermetic, reproducible, air-gap
 ## Non-Negotiables (Policy)
 
 - No network calls during build/test/lint. If a tool needs the network, it must be moved to `script/update` (online-only) or preinstalled.
+- Release CI is allowed to use `script/install-zig` to fetch Zig + cargo-zigbuild (hermetic enough for releases).
 - All dependencies are pinned to exact versions in `Cargo.toml` (use `=x.y.z`).
 - `Cargo.lock` is committed and treated as source of truth.
 - Vendored dependencies live in `vendor/cache` and are required for all builds.
@@ -24,6 +25,7 @@ All scripts are in `script/` and are offline-first.
 
 - `script/bootstrap`: validates the toolchain and vendor cache, then performs a frozen build check.
 - `script/update`: **online-only** dependency update + re-vendor. Use this to refresh `Cargo.lock` and `vendor/cache`.
+- `script/install-zig`: **online-only** CI helper that installs Zig + cargo-zigbuild for cross-target releases.
 - `script/test`: runs tests; `--cov` requires preinstalled `cargo-tarpaulin`, `jq`, and `bc`.
 - `script/lint`: format + clippy + docs; treats warnings as errors.
 - `script/build`: builds release binaries (host by default). Use `--release` with `--targets` for dist packaging; supports `--universal-darwin`.
