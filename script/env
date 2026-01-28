@@ -56,3 +56,62 @@ export VENDOR_DIR
 
 # make the vendor/cache directory if it doesn't exist
 mkdir -p "$VENDOR_DIR"
+
+die() {
+  echo -e "${RED}error:${OFF} $*" >&2
+  exit 1
+}
+
+warn() {
+  echo -e "${RED}warning:${OFF} $*" >&2
+}
+
+require_cmd() {
+  local cmd="$1"
+  if ! command -v "$cmd" >/dev/null 2>&1; then
+    die "missing required tool: $cmd"
+  fi
+}
+
+read_version_file() {
+  local file="$1"
+  if [[ -f "$file" ]]; then
+    head -n1 "$file" | tr -d '[:space:]'
+  fi
+}
+
+rust_toolchain_version() {
+  sed -n 's/^channel[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' "$DIR/rust-toolchain.toml" | head -n1
+}
+
+ensure_rust_toolchain() {
+  local expected
+  expected="$(rust_toolchain_version)"
+  if [[ -n "$expected" && "$RUST_VERSION" != "$expected" ]]; then
+    die "rust toolchain mismatch (expected ${expected}, found ${RUST_VERSION})"
+  fi
+  if [[ -f "$DIR/.rust-version" && -n "$expected" ]]; then
+    local file_version
+    file_version="$(read_version_file "$DIR/.rust-version")"
+    if [[ -n "$file_version" && "$file_version" != "$expected" ]]; then
+      die ".rust-version mismatch (expected ${expected}, found ${file_version})"
+    fi
+  fi
+}
+
+ensure_vendor_cache() {
+  if [[ ! -f "$DIR/.cargo/config.toml" ]]; then
+    die "missing .cargo/config.toml; vendored sources are required"
+  fi
+
+  if [[ ! -d "$VENDOR_DIR" || -z "$(ls -A "$VENDOR_DIR" 2>/dev/null)" ]]; then
+    die "vendor cache is empty; run script/update while online to vendor dependencies"
+  fi
+}
+
+require_clean_git() {
+  if [[ "${CI:-}" == "true" ]]; then
+    git diff --exit-code
+    git diff --cached --exit-code
+  fi
+}

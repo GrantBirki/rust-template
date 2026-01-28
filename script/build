@@ -62,7 +62,7 @@ build_date_utc() {
 generate_docs() {
   local host_bin="$target_dir/$host_target/release/${package_name}"
   if [[ ! -x "$host_bin" ]]; then
-    echo -e "${RED}warning:${OFF} host binary not found for docs at ${host_bin}" >&2
+    warn "host binary not found for docs at ${host_bin}"
     return
   fi
 
@@ -85,8 +85,7 @@ assert_tool_version() {
     local expected
     expected=$(head -n1 "$expected_file" | tr -d '[:space:]')
     if [[ -n "$expected" && "$actual_version" != "$expected" ]]; then
-      echo -e "${RED}error:${OFF} ${tool} version mismatch (expected ${expected}, found ${actual_version})" >&2
-      exit 1
+      die "${tool} version mismatch (expected ${expected}, found ${actual_version})"
     fi
   fi
 }
@@ -186,7 +185,7 @@ if [[ "$release_mode" != "true" ]]; then
     echo -e "${GREEN}Built binary:${OFF} ${binary_path}"
     echo -e "${GREEN}Binary size:${OFF} ${binary_size}"
   else
-    echo -e "${RED}warning:${OFF} could not determine built binary path/size" >&2
+    warn "could not determine built binary path/size"
   fi
   exit 0
 fi
@@ -223,8 +222,7 @@ export BUILD_COMMIT="$build_commit"
 export BUILD_DATE="$build_date"
 
 if [[ -z "$dist_dir" || "$dist_dir" == "/" ]]; then
-  echo -e "${RED}error:${OFF} invalid dist directory: ${dist_dir}" >&2
-  exit 1
+  die "invalid dist directory: ${dist_dir}"
 fi
 
 if [[ -d "$dist_dir" ]]; then
@@ -246,27 +244,20 @@ for target in "${targets[@]}"; do
         exit 1
       fi
     else
-      echo -e "${RED}error:${OFF} rustup is required to verify/install cross targets (${target})" >&2
-      exit 1
+      die "rustup is required to verify/install cross targets (${target})"
     fi
   fi
 
   build_cmd=(cargo build)
   if [[ "$target" != "$host_target" ]]; then
-    if ! command -v cargo-zigbuild >/dev/null 2>&1; then
-      echo -e "${RED}error:${OFF} cargo-zigbuild is required to build ${target} on ${host_target}" >&2
-      exit 1
-    fi
-    if ! command -v zig >/dev/null 2>&1; then
-      echo -e "${RED}error:${OFF} zig is required for cargo-zigbuild" >&2
-      exit 1
-    fi
+    require_cmd cargo-zigbuild
+    require_cmd zig
     assert_tool_version "zig" "$DIR/.zig-version" "$(zig version | head -n1)"
     if [[ -f "$DIR/.cargo-zigbuild-version" ]]; then
       expected=$(head -n1 "$DIR/.cargo-zigbuild-version" | tr -d '[:space:]')
       installed=$(cargo zigbuild --version | awk '{print $2}')
       if [[ -n "$expected" && "$installed" != "$expected" ]]; then
-        echo -e "${RED}warning:${OFF} cargo-zigbuild version mismatch (expected ${expected}, found ${installed})" >&2
+        warn "cargo-zigbuild version mismatch (expected ${expected}, found ${installed})"
       fi
     fi
     build_cmd=(cargo zigbuild)
@@ -277,8 +268,7 @@ for target in "${targets[@]}"; do
   exe_suffix=$(target_exe_suffix "$target")
   binary_path="$target_dir/$target/release/${package_name}${exe_suffix}"
   if [[ ! -f "$binary_path" ]]; then
-    echo -e "${RED}error:${OFF} expected binary not found at ${binary_path}" >&2
-    exit 1
+    die "expected binary not found at ${binary_path}"
   fi
 
   os_name=$(target_os "$target")
@@ -296,17 +286,13 @@ if [[ "$release_mode" == "true" ]]; then
 fi
 
 if [[ "$universal_darwin" == "true" ]]; then
-  if ! command -v lipo >/dev/null 2>&1; then
-    echo -e "${RED}error:${OFF} lipo is required to build a darwin universal binary" >&2
-    exit 1
-  fi
+  require_cmd lipo
 
   darwin_x86="$target_dir/x86_64-apple-darwin/release/${package_name}"
   darwin_arm="$target_dir/aarch64-apple-darwin/release/${package_name}"
 
   if [[ ! -f "$darwin_x86" || ! -f "$darwin_arm" ]]; then
-    echo -e "${RED}error:${OFF} darwin inputs missing; build x86_64-apple-darwin and aarch64-apple-darwin first" >&2
-    exit 1
+    die "darwin inputs missing; build x86_64-apple-darwin and aarch64-apple-darwin first"
   fi
 
   universal_name="${package_name}_${build_version}_darwin-universal"
@@ -319,7 +305,7 @@ if command -v shasum >/dev/null 2>&1; then
 elif command -v sha256sum >/dev/null 2>&1; then
   (cd "$dist_dir" && find . -maxdepth 1 -type f ! -name 'checksums.txt' -print0 | xargs -0 sha256sum > checksums.txt)
 else
-  echo -e "${RED}warning:${OFF} no sha256 tool found; skipping checksums" >&2
+  warn "no sha256 tool found; skipping checksums"
 fi
 
 echo -e "${GREEN}Release artifacts:${OFF} ${dist_dir}"
