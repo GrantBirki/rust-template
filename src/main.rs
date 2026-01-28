@@ -1,26 +1,89 @@
 #![forbid(unsafe_code)]
 
-use rust_template::{add, subtract};
+use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
+use clap_complete::{Shell, generate};
+use clap_mangen::Man;
+use rust_template::{add, greet, subtract, version_info};
+use std::io;
 
-// This function is excluded from code coverage
-#[cfg(not(tarpaulin_include))]
-fn main() {
-    let a = 5;
-    let b = 3;
+#[derive(Parser)]
+#[command(
+    name = "rust-template",
+    about = "Minimal hello-world CLI template",
+    version
+)]
+struct Cli {
+    /// Who to greet.
+    #[arg(short, long, default_value = "world")]
+    name: String,
 
-    println!("Adding {} and {} gives: {}", a, b, add(a, b));
-    println!("Subtracting {} from {} gives: {}", b, a, subtract(a, b));
+    /// Repeat the greeting N times.
+    #[arg(short, long, default_value_t = 1)]
+    times: u8,
+
+    /// Uppercase the greeting.
+    #[arg(short, long)]
+    shout: bool,
+
+    #[command(subcommand)]
+    command: Option<Commands>,
 }
 
-// Add test module to improve coverage reporting
-#[cfg(test)]
-mod tests {
-    use super::*;
+#[derive(Subcommand)]
+enum Commands {
+    /// Add two numbers.
+    Add { a: i32, b: i32 },
+    /// Subtract b from a.
+    Sub { a: i32, b: i32 },
+    /// Print extended version metadata.
+    Version,
+    /// Emit shell completions to stdout.
+    Completions { shell: CompletionShell },
+    /// Emit a man page to stdout.
+    Man,
+}
 
-    #[test]
-    fn test_main_imports() {
-        // Just verify that imports work properly
-        assert_eq!(add(2, 3), 5);
-        assert_eq!(subtract(5, 3), 2);
+#[derive(Clone, ValueEnum)]
+enum CompletionShell {
+    Bash,
+    Zsh,
+    Fish,
+    Powershell,
+}
+
+impl CompletionShell {
+    fn as_shell(&self) -> Shell {
+        match self {
+            CompletionShell::Bash => Shell::Bash,
+            CompletionShell::Zsh => Shell::Zsh,
+            CompletionShell::Fish => Shell::Fish,
+            CompletionShell::Powershell => Shell::PowerShell,
+        }
     }
+}
+
+fn main() {
+    let cli = Cli::parse();
+
+    match cli.command {
+        Some(Commands::Add { a, b }) => println!("{}", add(a, b)),
+        Some(Commands::Sub { a, b }) => println!("{}", subtract(a, b)),
+        Some(Commands::Version) => println!("{}", version_info().render()),
+        Some(Commands::Completions { shell }) => print_completions(shell),
+        Some(Commands::Man) => print_man(),
+        None => println!("{}", greet(&cli.name, cli.shout, cli.times)),
+    }
+}
+
+fn print_completions(shell: CompletionShell) {
+    let mut cmd = Cli::command();
+    let name = cmd.get_name().to_string();
+    generate(shell.as_shell(), &mut cmd, name, &mut io::stdout());
+}
+
+fn print_man() {
+    let cmd = Cli::command();
+    let man = Man::new(cmd);
+    man.render(&mut io::stdout())
+        .expect("failed to render man page");
 }

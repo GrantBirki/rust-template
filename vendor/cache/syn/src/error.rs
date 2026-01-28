@@ -1,18 +1,22 @@
 #[cfg(feature = "parsing")]
 use crate::buffer::Cursor;
+use crate::ext::{PunctExt as _, TokenStreamExt as _};
 use crate::thread::ThreadBound;
+#[cfg(feature = "parsing")]
+use alloc::format;
+use alloc::string::{String, ToString};
+use alloc::vec;
+use alloc::vec::Vec;
+use core::fmt::{self, Debug, Display};
+use core::slice;
 use proc_macro2::{
     Delimiter, Group, Ident, LexError, Literal, Punct, Spacing, Span, TokenStream, TokenTree,
 };
 #[cfg(feature = "printing")]
 use quote::ToTokens;
-use std::fmt::{self, Debug, Display};
-use std::iter::FromIterator;
-use std::slice;
-use std::vec;
 
 /// The result of a Syn parser.
-pub type Result<T> = std::result::Result<T, Error>;
+pub type Result<T> = core::result::Result<T, Error>;
 
 /// Error returned when a Syn parser cannot parse the input tokens.
 ///
@@ -23,7 +27,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// [`compile_error!`] in the generated code. This produces a better diagnostic
 /// message than simply panicking the macro.
 ///
-/// [`compile_error!`]: std::compile_error!
+/// [`compile_error!`]: core::compile_error!
 ///
 /// When parsing macro input, the [`parse_macro_input!`] macro handles the
 /// conversion to `compile_error!` automatically.
@@ -34,17 +38,33 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// # extern crate proc_macro;
 /// #
 /// use proc_macro::TokenStream;
-/// use syn::{parse_macro_input, AttributeArgs, ItemFn};
+/// use syn::parse::{Parse, ParseStream, Result};
+/// use syn::{parse_macro_input, ItemFn};
 ///
 /// # const IGNORE: &str = stringify! {
 /// #[proc_macro_attribute]
 /// # };
 /// pub fn my_attr(args: TokenStream, input: TokenStream) -> TokenStream {
-///     let args = parse_macro_input!(args as AttributeArgs);
+///     let args = parse_macro_input!(args as MyAttrArgs);
 ///     let input = parse_macro_input!(input as ItemFn);
 ///
 ///     /* ... */
 ///     # TokenStream::new()
+/// }
+///
+/// struct MyAttrArgs {
+///     # _k: [(); { stringify! {
+///     ...
+///     # }; 0 }]
+/// }
+///
+/// impl Parse for MyAttrArgs {
+///     fn parse(input: ParseStream) -> Result<Self> {
+///         # stringify! {
+///         ...
+///         # };
+///         # unimplemented!()
+///     }
 /// }
 /// ```
 ///
@@ -89,12 +109,19 @@ pub struct Error {
 struct ErrorMessage {
     // Span is implemented as an index into a thread-local interner to keep the
     // size small. It is not safe to access from a different thread. We want
-    // errors to be Send and Sync to play nicely with the Failure crate, so pin
-    // the span we're given to its original thread and assume it is
-    // Span::call_site if accessed from any other thread.
-    start_span: ThreadBound<Span>,
-    end_span: ThreadBound<Span>,
+    // errors to be Send and Sync to play nicely with ecosystem crates for error
+    // handling, so pin the span we're given to its original thread and assume
+    // it is Span::call_site if accessed from any other thread.
+    span: ThreadBound<SpanRange>,
     message: String,
+}
+
+// Cannot use core::ops::Range<Span> because that does not implement Copy,
+// whereas ThreadBound<T> requires a Copy impl as a way to ensure no Drop impls
+// are involved.
+struct SpanRange {
+    start: Span,
+    end: Span,
 }
 
 #[cfg(test)]
@@ -139,8 +166,10 @@ impl Error {
         fn new(span: Span, message: String) -> Error {
             Error {
                 messages: vec![ErrorMessage {
-                    start_span: ThreadBound::new(span),
-                    end_span: ThreadBound::new(span),
+                    span: ThreadBound::new(SpanRange {
+                        start: span,
+                        end: span,
+                    }),
                     message,
                 }],
             }
@@ -161,6 +190,7 @@ impl Error {
     /// When in doubt it's recommended to stick to `Error::new` (or
     /// `ParseStream::error`)!
     #[cfg(feature = "printing")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "printing")))]
     pub fn new_spanned<T: ToTokens, U: Display>(tokens: T, message: U) -> Self {
         return new_spanned(tokens.into_token_stream(), message.to_string());
 
@@ -170,8 +200,7 @@ impl Error {
             let end = iter.last().map_or(start, |t| t.span());
             Error {
                 messages: vec![ErrorMessage {
-                    start_span: ThreadBound::new(start),
-                    end_span: ThreadBound::new(end),
+                    span: ThreadBound::new(SpanRange { start, end }),
                     message,
                 }],
             }
@@ -184,11 +213,7 @@ impl Error {
     /// if called from a different thread than the one on which the `Error` was
     /// originally created.
     pub fn span(&self) -> Span {
-        let start = match self.messages[0].start_span.get() {
-            Some(span) => *span,
-            None => return Span::call_site(),
-        };
-        let end = match self.messages[0].end_span.get() {
+        let SpanRange { start, end } = match self.messages[0].span.get() {
             Some(span) => *span,
             None => return Span::call_site(),
         };
@@ -200,18 +225,19 @@ impl Error {
     /// The [`parse_macro_input!`] macro provides a convenient way to invoke
     /// this method correctly in a procedural macro.
     ///
-    /// [`compile_error!`]: std::compile_error!
+    /// [`compile_error!`]: core::compile_error!
     /// [`parse_macro_input!`]: crate::parse_macro_input!
     pub fn to_compile_error(&self) -> TokenStream {
-        self.messages
-            .iter()
-            .map(ErrorMessage::to_compile_error)
-            .collect()
+        let mut tokens = TokenStream::new();
+        for msg in &self.messages {
+            ErrorMessage::to_compile_error(msg, &mut tokens);
+        }
+        tokens
     }
 
     /// Render the error as an invocation of [`compile_error!`].
     ///
-    /// [`compile_error!`]: std::compile_error!
+    /// [`compile_error!`]: core::compile_error!
     ///
     /// # Example
     ///
@@ -253,39 +279,57 @@ impl Error {
 }
 
 impl ErrorMessage {
-    fn to_compile_error(&self) -> TokenStream {
-        let start = self
-            .start_span
-            .get()
-            .cloned()
-            .unwrap_or_else(Span::call_site);
-        let end = self.end_span.get().cloned().unwrap_or_else(Span::call_site);
+    fn to_compile_error(&self, tokens: &mut TokenStream) {
+        let (start, end) = match self.span.get() {
+            Some(range) => (range.start, range.end),
+            None => (Span::call_site(), Span::call_site()),
+        };
 
-        // compile_error!($message)
-        TokenStream::from_iter(vec![
-            TokenTree::Ident(Ident::new("compile_error", start)),
-            TokenTree::Punct({
-                let mut punct = Punct::new('!', Spacing::Alone);
-                punct.set_span(start);
-                punct
-            }),
-            TokenTree::Group({
-                let mut group = Group::new(Delimiter::Brace, {
-                    TokenStream::from_iter(vec![TokenTree::Literal({
-                        let mut string = Literal::string(&self.message);
-                        string.set_span(end);
-                        string
-                    })])
-                });
-                group.set_span(end);
-                group
-            }),
-        ])
+        // ::core::compile_error!($message)
+        tokens.append(TokenTree::Punct(Punct::new_spanned(
+            ':',
+            Spacing::Joint,
+            start,
+        )));
+        tokens.append(TokenTree::Punct(Punct::new_spanned(
+            ':',
+            Spacing::Alone,
+            start,
+        )));
+        tokens.append(TokenTree::Ident(Ident::new("core", start)));
+        tokens.append(TokenTree::Punct(Punct::new_spanned(
+            ':',
+            Spacing::Joint,
+            start,
+        )));
+        tokens.append(TokenTree::Punct(Punct::new_spanned(
+            ':',
+            Spacing::Alone,
+            start,
+        )));
+        tokens.append(TokenTree::Ident(Ident::new("compile_error", start)));
+        tokens.append(TokenTree::Punct(Punct::new_spanned(
+            '!',
+            Spacing::Alone,
+            start,
+        )));
+        tokens.append(TokenTree::Group({
+            let mut group = Group::new(
+                Delimiter::Brace,
+                TokenStream::from({
+                    let mut string = Literal::string(&self.message);
+                    string.set_span(end);
+                    TokenTree::Literal(string)
+                }),
+            );
+            group.set_span(end);
+            group
+        }));
     }
 }
 
 #[cfg(feature = "parsing")]
-pub fn new_at<T: Display>(scope: Span, cursor: Cursor, message: T) -> Error {
+pub(crate) fn new_at<T: Display>(scope: Span, cursor: Cursor, message: T) -> Error {
     if cursor.eof() {
         Error::new(scope, format!("unexpected end of input, {}", message))
     } else {
@@ -295,14 +339,13 @@ pub fn new_at<T: Display>(scope: Span, cursor: Cursor, message: T) -> Error {
 }
 
 #[cfg(all(feature = "parsing", any(feature = "full", feature = "derive")))]
-pub fn new2<T: Display>(start: Span, end: Span, message: T) -> Error {
+pub(crate) fn new2<T: Display>(start: Span, end: Span, message: T) -> Error {
     return new2(start, end, message.to_string());
 
     fn new2(start: Span, end: Span, message: String) -> Error {
         Error {
             messages: vec![ErrorMessage {
-                start_span: ThreadBound::new(start),
-                end_span: ThreadBound::new(end),
+                span: ThreadBound::new(SpanRange { start, end }),
                 message,
             }],
         }
@@ -347,25 +390,27 @@ impl Clone for Error {
 
 impl Clone for ErrorMessage {
     fn clone(&self) -> Self {
-        let start = self
-            .start_span
-            .get()
-            .cloned()
-            .unwrap_or_else(Span::call_site);
-        let end = self.end_span.get().cloned().unwrap_or_else(Span::call_site);
         ErrorMessage {
-            start_span: ThreadBound::new(start),
-            end_span: ThreadBound::new(end),
+            span: self.span,
             message: self.message.clone(),
         }
     }
 }
 
+impl Clone for SpanRange {
+    fn clone(&self) -> Self {
+        *self
+    }
+}
+
+impl Copy for SpanRange {}
+
+// TODO: impl core::error::Error (requires Rust 1.81+)
 impl std::error::Error for Error {}
 
 impl From<LexError> for Error {
     fn from(err: LexError) -> Self {
-        Error::new(err.span(), "lex error")
+        Error::new(err.span(), err)
     }
 }
 

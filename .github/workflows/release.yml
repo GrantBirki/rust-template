@@ -2,17 +2,86 @@ name: release
 
 on:
   push:
-    tags:
-      - "*"
+    branches:
+      - main
+    paths:
+      - "Cargo.toml"
 
 permissions: {}
 
 jobs:
-  build-linux:
+  prepare:
     if: github.repository == 'grantbirki/rust-template' # change this to your repository
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      version_tag: ${{ steps.version.outputs.version_tag }}
+      should_release: ${{ steps.version.outputs.should_release }}
+
+    steps:
+      - name: checkout
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # pin@v6.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: determine version + tag
+        id: version
+        run: |
+          set -euo pipefail
+          git fetch --tags --force
+
+          version=$(sed -n 's/^version[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' Cargo.toml | head -n1)
+          if [[ -z "$version" ]]; then
+            echo "could not parse version from Cargo.toml" >&2
+            exit 1
+          fi
+          version_tag="v${version}"
+
+          should_release="false"
+          if git cat-file -e "${{ github.event.before }}:Cargo.toml" 2>/dev/null; then
+            previous=$(git show "${{ github.event.before }}:Cargo.toml" \
+              | sed -n 's/^version[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' \
+              | head -n1)
+            if [[ "$previous" != "$version" ]]; then
+              should_release="true"
+            fi
+          else
+            should_release="true"
+          fi
+
+          if ! git diff --name-only "${{ github.event.before }}" "${{ github.sha }}" | grep -qx "Cargo.toml"; then
+            should_release="false"
+          fi
+
+          if git rev-parse "$version_tag" >/dev/null 2>&1; then
+            should_release="false"
+          fi
+
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "version_tag=${version_tag}" >> "$GITHUB_OUTPUT"
+          echo "should_release=${should_release}" >> "$GITHUB_OUTPUT"
+
+          if [[ "$should_release" != "true" ]]; then
+            echo "No version bump detected; skipping release."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "$version_tag" -m "$version_tag"
+          git push origin "$version_tag"
+
+  build-linux:
+    if: needs.prepare.outputs.should_release == 'true' && github.repository == 'grantbirki/rust-template' # change this to your repository
+    needs: prepare
     permissions:
       contents: read
     runs-on: ubuntu-latest
+    env:
+      BUILD_VERSION: ${{ needs.prepare.outputs.version_tag }}
 
     steps:
       - name: checkout
@@ -23,54 +92,10 @@ jobs:
 
       - uses: actions-rust-lang/setup-rust-toolchain@1780873c7b576612439a134613cc4cc74ce5538c # pin@v1
 
-      - name: install zig
+      - name: install zig + cargo-zigbuild
         env:
-          ZIG_VERSION: 0.15.2
-          ZIG_SHA256_X86_64_MACOS: 375b6909fc1495d16fc2c7db9538f707456bfc3373b14ee83fdd3e22b3d43f7f
-          ZIG_SHA256_AARCH64_MACOS: 3cc2bab367e185cdfb27501c4b30b1b0653c28d9f73df8dc91488e66ece5fa6b
-          ZIG_SHA256_X86_64_LINUX: 02aa270f183da276e5b5920b1dac44a63f1a49e55050ebde3aecc9eb82f93239
-          ZIG_SHA256_AARCH64_LINUX: 958ed7d1e00d0ea76590d27666efbf7a932281b3d7ba0c6b01b0ff26498f667f
-        run: |
-          set -euo pipefail
-          os="$(uname -s)"
-          case "$os" in
-            Darwin) zig_os="macos" ;;
-            Linux) zig_os="linux" ;;
-            *) echo "unsupported OS: $os" >&2; exit 1 ;;
-          esac
-          arch="$(uname -m)"
-          case "$arch" in
-            arm64|aarch64) zig_arch="aarch64" ;;
-            x86_64) zig_arch="x86_64" ;;
-            *) echo "unsupported arch: $arch" >&2; exit 1 ;;
-          esac
-          case "${zig_os}_${zig_arch}" in
-            macos_x86_64) zig_shasum="$ZIG_SHA256_X86_64_MACOS" ;;
-            macos_aarch64) zig_shasum="$ZIG_SHA256_AARCH64_MACOS" ;;
-            linux_x86_64) zig_shasum="$ZIG_SHA256_X86_64_LINUX" ;;
-            linux_aarch64) zig_shasum="$ZIG_SHA256_AARCH64_LINUX" ;;
-            *) echo "unsupported zig target: ${zig_os}_${zig_arch}" >&2; exit 1 ;;
-          esac
-          tarball="zig-${zig_arch}-${zig_os}-${ZIG_VERSION}.tar.xz"
-          url="https://ziglang.org/download/${ZIG_VERSION}/${tarball}"
-          curl -fsSL "$url" -o "$tarball"
-          if command -v shasum >/dev/null 2>&1; then
-            echo "${zig_shasum}  ${tarball}" | shasum -a 256 -c -
-          else
-            echo "${zig_shasum}  ${tarball}" | sha256sum -c -
-          fi
-          tar -xJf "$tarball"
-          zig_root="${RUNNER_TEMP:-/tmp}/zig-${zig_arch}-${zig_os}-${ZIG_VERSION}"
-          rm -rf "$zig_root"
-          mv "zig-${zig_arch}-${zig_os}-${ZIG_VERSION}" "$zig_root"
-          echo "$zig_root" >> "$GITHUB_PATH"
-          export PATH="$zig_root:$PATH"
-          zig version
-
-      - name: install cargo-zigbuild
-        env:
-          CARGO_ZIGBUILD_VERSION: 0.20.1
-        run: cargo install --locked --version "$CARGO_ZIGBUILD_VERSION" --force cargo-zigbuild
+          RUSTUP_TARGETS: "aarch64-unknown-linux-gnu"
+        run: script/install-zig
 
       - name: bootstrap
         run: script/bootstrap
@@ -87,10 +112,13 @@ jobs:
           if-no-files-found: error
 
   build-macos:
-    if: github.repository == 'grantbirki/rust-template' # change this to your repository
+    if: needs.prepare.outputs.should_release == 'true' && github.repository == 'grantbirki/rust-template' # change this to your repository
+    needs: prepare
     permissions:
       contents: read
     runs-on: macos-latest
+    env:
+      BUILD_VERSION: ${{ needs.prepare.outputs.version_tag }}
 
     steps:
       - name: checkout
@@ -101,54 +129,10 @@ jobs:
 
       - uses: actions-rust-lang/setup-rust-toolchain@1780873c7b576612439a134613cc4cc74ce5538c # pin@v1
 
-      - name: install zig
+      - name: install zig + cargo-zigbuild
         env:
-          ZIG_VERSION: 0.15.2
-          ZIG_SHA256_X86_64_MACOS: 375b6909fc1495d16fc2c7db9538f707456bfc3373b14ee83fdd3e22b3d43f7f
-          ZIG_SHA256_AARCH64_MACOS: 3cc2bab367e185cdfb27501c4b30b1b0653c28d9f73df8dc91488e66ece5fa6b
-          ZIG_SHA256_X86_64_LINUX: 02aa270f183da276e5b5920b1dac44a63f1a49e55050ebde3aecc9eb82f93239
-          ZIG_SHA256_AARCH64_LINUX: 958ed7d1e00d0ea76590d27666efbf7a932281b3d7ba0c6b01b0ff26498f667f
-        run: |
-          set -euo pipefail
-          os="$(uname -s)"
-          case "$os" in
-            Darwin) zig_os="macos" ;;
-            Linux) zig_os="linux" ;;
-            *) echo "unsupported OS: $os" >&2; exit 1 ;;
-          esac
-          arch="$(uname -m)"
-          case "$arch" in
-            arm64|aarch64) zig_arch="aarch64" ;;
-            x86_64) zig_arch="x86_64" ;;
-            *) echo "unsupported arch: $arch" >&2; exit 1 ;;
-          esac
-          case "${zig_os}_${zig_arch}" in
-            macos_x86_64) zig_shasum="$ZIG_SHA256_X86_64_MACOS" ;;
-            macos_aarch64) zig_shasum="$ZIG_SHA256_AARCH64_MACOS" ;;
-            linux_x86_64) zig_shasum="$ZIG_SHA256_X86_64_LINUX" ;;
-            linux_aarch64) zig_shasum="$ZIG_SHA256_AARCH64_LINUX" ;;
-            *) echo "unsupported zig target: ${zig_os}_${zig_arch}" >&2; exit 1 ;;
-          esac
-          tarball="zig-${zig_arch}-${zig_os}-${ZIG_VERSION}.tar.xz"
-          url="https://ziglang.org/download/${ZIG_VERSION}/${tarball}"
-          curl -fsSL "$url" -o "$tarball"
-          if command -v shasum >/dev/null 2>&1; then
-            echo "${zig_shasum}  ${tarball}" | shasum -a 256 -c -
-          else
-            echo "${zig_shasum}  ${tarball}" | sha256sum -c -
-          fi
-          tar -xJf "$tarball"
-          zig_root="${RUNNER_TEMP:-/tmp}/zig-${zig_arch}-${zig_os}-${ZIG_VERSION}"
-          rm -rf "$zig_root"
-          mv "zig-${zig_arch}-${zig_os}-${ZIG_VERSION}" "$zig_root"
-          echo "$zig_root" >> "$GITHUB_PATH"
-          export PATH="$zig_root:$PATH"
-          zig version
-
-      - name: install cargo-zigbuild
-        env:
-          CARGO_ZIGBUILD_VERSION: 0.20.1
-        run: cargo install --locked --version "$CARGO_ZIGBUILD_VERSION" --force cargo-zigbuild
+          RUSTUP_TARGETS: "x86_64-apple-darwin,aarch64-apple-darwin"
+        run: script/install-zig
 
       - name: bootstrap
         run: script/bootstrap
@@ -165,8 +149,8 @@ jobs:
           if-no-files-found: error
 
   release:
-    if: github.repository == 'grantbirki/rust-template' # change this to your repository
-    needs: [build-linux, build-macos]
+    if: needs.prepare.outputs.should_release == 'true' && github.repository == 'grantbirki/rust-template' # change this to your repository
+    needs: [prepare, build-linux, build-macos]
     permissions:
       contents: write
     runs-on: ubuntu-latest
@@ -189,21 +173,39 @@ jobs:
           set -euo pipefail
           rm -rf dist/merged
           mkdir -p dist/merged
+          if [[ -d dist/linux/docs ]]; then
+            cp -R dist/linux/docs dist/merged/
+          fi
+          if [[ -d dist/macos/docs && ! -d dist/merged/docs ]]; then
+            cp -R dist/macos/docs dist/merged/
+          fi
 
-          while IFS= read -r -d '' file; do
+          find dist/linux dist/macos -maxdepth 1 -type f ! -name 'checksums.txt' -print0 | while IFS= read -r -d '' file; do
             cp "$file" dist/merged/
-          done < <(find dist -path 'dist/merged' -prune -o -type f ! -name 'checksums.txt' -print0)
+          done
 
-          cd dist/merged
-          for file in *; do
-            case "$file" in
-              checksums.txt|*.tar.gz) continue ;;
+          docs_dir="dist/merged/docs"
+          staging="dist/merged/staging"
+          rm -rf "$staging"
+          mkdir -p "$staging"
+
+          for file in dist/merged/*; do
+            case "$(basename "$file")" in
+              checksums.txt|*.tar.gz|docs|staging) continue ;;
             esac
             if [[ -f "$file" ]]; then
-              chmod +x "$file"
-              tar -czf "${file}.tar.gz" "$file"
+              base="$(basename "$file")"
+              stage_dir="$staging/$base"
+              mkdir -p "$stage_dir"
+              cp "$file" "$stage_dir/"
+              if [[ -d "$docs_dir" ]]; then
+                cp -R "$docs_dir"/* "$stage_dir/" 2>/dev/null || true
+              fi
+              chmod +x "$stage_dir/$base"
+              (cd "$stage_dir" && tar -czf "../../${base}.tar.gz" .)
             fi
           done
+          rm -rf "$staging"
 
           if command -v shasum >/dev/null 2>&1; then
             find . -maxdepth 1 -type f ! -name 'checksums.txt' -print0 | xargs -0 shasum -a 256 > checksums.txt
@@ -222,7 +224,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
         run: |
-          tag="${GITHUB_REF_NAME}"
+          tag="${{ needs.prepare.outputs.version_tag }}"
 
           if gh release view "$tag" >/dev/null 2>&1; then
             gh release upload "$tag" dist/merged/* --clobber
