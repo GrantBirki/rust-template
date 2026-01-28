@@ -3,6 +3,7 @@
 [![lint](https://github.com/GrantBirki/rust-template/actions/workflows/lint.yml/badge.svg)](https://github.com/GrantBirki/rust-template/actions/workflows/lint.yml)
 [![test](https://github.com/GrantBirki/rust-template/actions/workflows/test.yml/badge.svg)](https://github.com/GrantBirki/rust-template/actions/workflows/test.yml)
 [![build](https://github.com/GrantBirki/rust-template/actions/workflows/build.yml/badge.svg)](https://github.com/GrantBirki/rust-template/actions/workflows/build.yml)
+[![release](https://github.com/GrantBirki/rust-template/actions/workflows/release.yml/badge.svg)](https://github.com/GrantBirki/rust-template/actions/workflows/release.yml)
 
 A starter template for Rust projects.
 
