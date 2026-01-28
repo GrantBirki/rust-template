@@ -15,13 +15,15 @@ mkdir -p "$DIR/coverage"
 
 # Coverage mode requires preinstalled tools (no network installs).
 if ! command -v cargo-llvm-cov >/dev/null 2>&1; then
-  echo "cargo-llvm-cov is required for coverage runs. Install it before running script/test --cov." >&2
+  echo "cargo-llvm-cov is required for coverage runs." >&2
+  echo "Install it with: cargo install cargo-llvm-cov" >&2
   exit 1
 fi
 
 if command -v rustup >/dev/null 2>&1; then
   if ! rustup component list --installed | grep -qx "llvm-tools-preview"; then
     echo "rustup component llvm-tools-preview is required for coverage runs." >&2
+    echo "Install it with: rustup component add llvm-tools-preview" >&2
     exit 1
   fi
 fi
