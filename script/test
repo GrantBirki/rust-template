@@ -14,92 +14,56 @@ fi
 mkdir -p "$DIR/coverage"
 
 # Coverage mode requires preinstalled tools (no network installs).
-if ! command -v cargo-tarpaulin >/dev/null 2>&1; then
-  echo "cargo-tarpaulin is required for coverage runs. Install it before running script/test --cov." >&2
+if ! command -v cargo-llvm-cov >/dev/null 2>&1; then
+  echo "cargo-llvm-cov is required for coverage runs. Install it before running script/test --cov." >&2
   exit 1
 fi
 
-if ! command -v jq >/dev/null 2>&1; then
-  echo "jq is required for parsing JSON coverage output. Install it before running script/test --cov." >&2
-  exit 1
+if command -v rustup >/dev/null 2>&1; then
+  if ! rustup component list --installed | grep -qx "llvm-tools-preview"; then
+    echo "rustup component llvm-tools-preview is required for coverage runs." >&2
+    exit 1
+  fi
 fi
 
-if ! command -v bc >/dev/null 2>&1; then
-  echo "bc is required for coverage calculations. Install it before running script/test --cov." >&2
-  exit 1
-fi
+# run coverage
+echo -e "\n🧪 ${BLUE}Running coverage: $(date "+%H:%M:%S")${OFF}\n"
 
-# run tests
-echo -e "\n🧪 ${BLUE}Running tests: $(date "+%H:%M:%S")${OFF}\n"
+cov_exit=0
+lcov_path="$DIR/coverage/lcov.info"
+html_dir="$DIR/coverage/html"
 
-# Run cargo test first to make sure all tests pass
-cargo test --frozen && test_exit=$? || test_exit=$?
+rm -f "$lcov_path"
+rm -rf "$html_dir"
 
-if [ $test_exit -ne 0 ]; then
-  echo -e "\n❌ ${RED}Tests failed, skipping coverage run${OFF}"
-  exit 1
-fi
-
-# Run tarpaulin with specific options to improve coverage calculation
-cargo tarpaulin --workspace \
-  --exclude-files="vendor/**/*" \
-  --exclude-files="target/**/*" \
-  --out Html --out Json \
-  --output-dir coverage \
+cargo llvm-cov --workspace --all-features \
+  --lcov --output-path "$lcov_path" \
+  --html --output-dir "$html_dir" \
+  --ignore-filename-regex '(^|/)(tests|benches|target|vendor)/|/\.cargo/registry/|/rustc/' \
   && cov_exit=$? || cov_exit=$?
 
-# Extract coverage percentage from the tarpaulin JSON output
-if [ -f "$DIR/coverage/tarpaulin-report.json" ]; then
-  # Parse the coverage from JSON using jq
-  coverage_raw=$(jq -r '.coverage' "$DIR/coverage/tarpaulin-report.json")
-  
-  # Check if the value is already a percentage or a decimal
-  if (( $(echo "$coverage_raw > 1.0" | bc -l) )); then
-    # Already a percentage, format it
-    coverage_value=$(echo "$coverage_raw" | awk '{printf "%.1f", $1}')
-  else
-    # Convert from decimal to percentage
-    coverage_value=$(echo "$coverage_raw * 100" | bc -l | awk '{printf "%.1f", $1}')
-  fi
-  
-  formatted_coverage="${coverage_value}%"
-  
-  # Create the total-coverage.txt file for future reference
-  echo "$formatted_coverage" > "$DIR/coverage/total-coverage.txt"
-  
-  # Check if coverage is exactly 100%
-  if (( $(echo "$coverage_value == 100.0" | bc -l) )) || (( $(echo "$coverage_value > 99.9" | bc -l) )); then
-    cov_exit=0
-    echo -e "\n✅ Total Coverage: ${GREEN}$formatted_coverage${OFF}"
+if [[ -f "$lcov_path" ]]; then
+  lines_total=$(awk -F: '/^LF:/ {sum += $2} END {print sum+0}' "$lcov_path")
+  lines_hit=$(awk -F: '/^LH:/ {sum += $2} END {print sum+0}' "$lcov_path")
+  if [[ "$lines_total" -gt 0 ]]; then
+    coverage_value=$(awk -v hit="$lines_hit" -v total="$lines_total" 'BEGIN {printf "%.1f", (hit/total)*100}')
+    formatted_coverage="${coverage_value}%"
+    echo "$formatted_coverage" > "$DIR/coverage/total-coverage.txt"
+    if awk -v value="$coverage_value" 'BEGIN {exit !(value >= 100.0)}'; then
+      cov_exit=0
+      echo -e "\n✅ Total Coverage: ${GREEN}$formatted_coverage${OFF}"
+    else
+      cov_exit=1
+      echo -e "\n❌ ${RED}Total Coverage: $formatted_coverage (must be 100%)${OFF}"
+    fi
   else
     cov_exit=1
-    echo -e "\n❌ Total Coverage: ${RED}$formatted_coverage${OFF} (must be 100%)"
+    echo -e "\n❌ ${RED}Coverage report missing line counts${OFF}"
   fi
 else
   cov_exit=1
   echo -e "\n❌ ${RED}Coverage report not found!${OFF}"
-  formatted_coverage="0.0%"
 fi
 
-echo ""
-echo "---------------------------------------"
-echo "📊 Summary Results"
-echo "---------------------------------------"
-echo ""
-
-if [[ $test_exit == 0 ]]; then
-  echo -e "✅ ${GREEN}tests:    exitcode=${test_exit}${OFF}"
-else
-  echo -e "❌ ${RED}tests:    exitcode=${test_exit}${OFF}"
-fi
-
-if [[ $cov_exit == 0 ]]; then
-  echo -e "✅ ${GREEN}coverage: exitcode=${cov_exit} ($formatted_coverage)${OFF}"
-else
-  echo -e "❌ ${RED}coverage: exitcode=${cov_exit} ($formatted_coverage)${OFF}"
-fi
-
-[ "$test_exit" -gt 0 ] && exit 1
 [ $cov_exit -gt 0 ] && exit 1
-
 exit 0
