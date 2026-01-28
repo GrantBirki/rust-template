@@ -45,6 +45,37 @@ target_arch() {
   esac
 }
 
+build_date_utc() {
+  if [[ -n "${SOURCE_DATE_EPOCH:-}" ]]; then
+    if date -u -d "@$SOURCE_DATE_EPOCH" +"%Y-%m-%dT%H:%M:%SZ" >/dev/null 2>&1; then
+      date -u -d "@$SOURCE_DATE_EPOCH" +"%Y-%m-%dT%H:%M:%SZ"
+      return
+    fi
+    if date -u -r "$SOURCE_DATE_EPOCH" +"%Y-%m-%dT%H:%M:%SZ" >/dev/null 2>&1; then
+      date -u -r "$SOURCE_DATE_EPOCH" +"%Y-%m-%dT%H:%M:%SZ"
+      return
+    fi
+  fi
+  date -u +"%Y-%m-%dT%H:%M:%SZ"
+}
+
+generate_docs() {
+  local host_bin="$target_dir/$host_target/release/${package_name}"
+  if [[ ! -x "$host_bin" ]]; then
+    echo -e "${RED}warning:${OFF} host binary not found for docs at ${host_bin}" >&2
+    return
+  fi
+
+  local docs_dir="$dist_dir/docs"
+  mkdir -p "$docs_dir/completions"/{bash,zsh,fish,powershell} "$docs_dir/man"
+
+  "$host_bin" completions bash > "$docs_dir/completions/bash/${package_name}"
+  "$host_bin" completions zsh > "$docs_dir/completions/zsh/_${package_name}"
+  "$host_bin" completions fish > "$docs_dir/completions/fish/${package_name}.fish"
+  "$host_bin" completions powershell > "$docs_dir/completions/powershell/${package_name}.ps1"
+  "$host_bin" man > "$docs_dir/man/${package_name}.1"
+}
+
 assert_tool_version() {
   local tool="$1"
   local expected_file="$2"
@@ -181,6 +212,16 @@ if [[ -z "$build_version" ]]; then
   build_version="dev"
 fi
 
+build_commit=$(git rev-parse --short HEAD 2>/dev/null || true)
+if [[ -z "$build_commit" ]]; then
+  build_commit="unknown"
+fi
+build_date=$(build_date_utc)
+
+export BUILD_VERSION="$build_version"
+export BUILD_COMMIT="$build_commit"
+export BUILD_DATE="$build_date"
+
 if [[ -z "$dist_dir" || "$dist_dir" == "/" ]]; then
   echo -e "${RED}error:${OFF} invalid dist directory: ${dist_dir}" >&2
   exit 1
@@ -221,7 +262,13 @@ for target in "${targets[@]}"; do
       exit 1
     fi
     assert_tool_version "zig" "$DIR/.zig-version" "$(zig version | head -n1)"
-    assert_tool_version "cargo-zigbuild" "$DIR/.cargo-zigbuild-version" "$(cargo zigbuild --version | awk '{print $2}')"
+    if [[ -f "$DIR/.cargo-zigbuild-version" ]]; then
+      expected=$(head -n1 "$DIR/.cargo-zigbuild-version" | tr -d '[:space:]')
+      installed=$(cargo zigbuild --version | awk '{print $2}')
+      if [[ -n "$expected" && "$installed" != "$expected" ]]; then
+        echo -e "${RED}warning:${OFF} cargo-zigbuild version mismatch (expected ${expected}, found ${installed})" >&2
+      fi
+    fi
     build_cmd=(cargo zigbuild)
   fi
 
@@ -243,6 +290,10 @@ for target in "${targets[@]}"; do
   binary_size=$(ls -lh "$binary_path" | awk '{print $5}')
   echo -e "${GREEN}Built:${OFF} ${dist_name} (${binary_size})"
 done
+
+if [[ "$release_mode" == "true" ]]; then
+  generate_docs
+fi
 
 if [[ "$universal_darwin" == "true" ]]; then
   if ! command -v lipo >/dev/null 2>&1; then

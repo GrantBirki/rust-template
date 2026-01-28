@@ -15,6 +15,7 @@ A starter template for Rust projects.
 - Basic CI/CD setup
 - Basic testing setup with code coverage
 - Cross-platform build script with macOS universal binaries
+- CLI example with completions + man page generation
 
 ## Getting Started
 
@@ -25,6 +26,54 @@ A starter template for Rust projects.
 5. Run `script/build` to build the project
 6. Run `script/server` to run the app (or CLI)
 7. Run `script/release` to create a new release
+
+## CLI Usage (Example)
+
+```console
+# default greeting
+./target/release/rust-template
+
+# greet someone by name
+./target/release/rust-template --name grantbirki
+
+# repeat + shout
+./target/release/rust-template --name monalisa --times 3 --shout
+
+# arithmetic helpers
+./target/release/rust-template add 2 3
+./target/release/rust-template sub 10 4
+
+# extended version metadata
+./target/release/rust-template version
+```
+
+## Completions + Man Pages
+
+Release artifacts include shell completions and a man page:
+
+```console
+./target/release/rust-template completions bash > rust-template.bash
+./target/release/rust-template completions zsh > _rust-template
+./target/release/rust-template completions fish > rust-template.fish
+./target/release/rust-template man > rust-template.1
+```
+
+## Homebrew (Custom Tap)
+
+This template is designed to ship prebuilt release tarballs that Homebrew can install.
+In your tap, point the formula at the release artifacts (including the macOS universal binary).
+
+Example paths (release tag `vX.Y.Z`):
+
+- macOS universal: `rust-template_vX.Y.Z_darwin-universal.tar.gz`
+- Linux amd64: `rust-template_vX.Y.Z_linux-amd64.tar.gz`
+- Linux arm64: `rust-template_vX.Y.Z_linux-arm64.tar.gz`
+
+The tarballs include:
+
+- the binary at the archive root
+- `completions/` for bash/zsh/fish/powershell
+- `man/` for the man page
 
 ## Dependency Updates (Online Only)
 

@@ -101,21 +101,39 @@ jobs:
           set -euo pipefail
           rm -rf dist/merged
           mkdir -p dist/merged
+          if [[ -d dist/linux/docs ]]; then
+            cp -R dist/linux/docs dist/merged/
+          fi
+          if [[ -d dist/macos/docs && ! -d dist/merged/docs ]]; then
+            cp -R dist/macos/docs dist/merged/
+          fi
 
-          while IFS= read -r -d '' file; do
+          find dist/linux dist/macos -maxdepth 1 -type f ! -name 'checksums.txt' -print0 | while IFS= read -r -d '' file; do
             cp "$file" dist/merged/
-          done < <(find dist -path 'dist/merged' -prune -o -type f ! -name 'checksums.txt' -print0)
+          done
 
-          cd dist/merged
-          for file in *; do
-            case "$file" in
-              checksums.txt|*.tar.gz) continue ;;
+          docs_dir="dist/merged/docs"
+          staging="dist/merged/staging"
+          rm -rf "$staging"
+          mkdir -p "$staging"
+
+          for file in dist/merged/*; do
+            case "$(basename "$file")" in
+              checksums.txt|*.tar.gz|docs|staging) continue ;;
             esac
             if [[ -f "$file" ]]; then
-              chmod +x "$file"
-              tar -czf "${file}.tar.gz" "$file"
+              base="$(basename "$file")"
+              stage_dir="$staging/$base"
+              mkdir -p "$stage_dir"
+              cp "$file" "$stage_dir/"
+              if [[ -d "$docs_dir" ]]; then
+                cp -R "$docs_dir"/* "$stage_dir/" 2>/dev/null || true
+              fi
+              chmod +x "$stage_dir/$base"
+              (cd "$stage_dir" && tar -czf "../../${base}.tar.gz" .)
             fi
           done
+          rm -rf "$staging"
 
           if command -v shasum >/dev/null 2>&1; then
             find . -maxdepth 1 -type f ! -name 'checksums.txt' -print0 | xargs -0 shasum -a 256 > checksums.txt

@@ -12,7 +12,7 @@ This repository is a Rust template optimized for hermetic, reproducible, air-gap
 ## Non-Negotiables (Policy)
 
 - No network calls during build/test/lint. If a tool needs the network, it must be moved to `script/update` (online-only) or preinstalled.
-- Release CI is allowed to use `script/install-zig` to fetch pinned Zig + cargo-zigbuild (hermetic enough for releases).
+- Release CI is allowed to use `script/install-zig` to fetch pinned Zig and install `cargo-zigbuild` with `--locked` (hermetic enough for releases).
 - All dependencies are pinned to exact versions in `Cargo.toml` (use `=x.y.z`).
 - `Cargo.lock` is committed and treated as source of truth.
 - Vendored dependencies live in `vendor/cache` and are required for all builds.
@@ -25,10 +25,10 @@ All scripts are in `script/` and are offline-first.
 
 - `script/bootstrap`: validates the toolchain and vendor cache, then performs a frozen build check.
 - `script/update`: **online-only** dependency update + re-vendor. Use this to refresh `Cargo.lock` and `vendor/cache`.
-- `script/install-zig`: **online-only** CI helper that installs pinned Zig + cargo-zigbuild for cross-target releases. Accepts `RUSTUP_TARGETS` to install extra targets.
+- `script/install-zig`: **online-only** CI helper that installs pinned Zig + `cargo-zigbuild` (locked) for cross-target releases. Accepts `RUSTUP_TARGETS` to install extra targets.
 - `script/test`: runs tests; `--cov` requires preinstalled `cargo-tarpaulin`, `jq`, and `bc`.
 - `script/lint`: format + clippy + docs; treats warnings as errors.
-- `script/build`: builds release binaries (host by default). Use `--release` with `--targets` for dist packaging; supports `--universal-darwin`.
+- `script/build`: builds release binaries (host by default). Use `--release` with `--targets` for dist packaging; supports `--universal-darwin` and generates `dist/docs` (completions + man page).
 - `script/server`: runs the app/CLI via `cargo run --frozen`.
 - `script/release`: tags and pushes a new release.
 
@@ -74,7 +74,17 @@ CI must be air-gapped for build/test/lint:
 
 - Example: `script/build --release --targets "x86_64-unknown-linux-gnu,aarch64-unknown-linux-gnu"`
 - macOS universal binaries: `script/build --release --targets "x86_64-apple-darwin,aarch64-apple-darwin" --universal-darwin`
-- Cross builds require preinstalled `zig` and `cargo-zigbuild` that match `.zig-version` and `.cargo-zigbuild-version`.
+- Cross builds require preinstalled `zig` and `cargo-zigbuild` that should match `.zig-version` and `.cargo-zigbuild-version`.
+
+## Homebrew Packaging
+
+Release archives include:
+
+- Binary at the archive root.
+- `completions/` for bash/zsh/fish/powershell.
+- `man/` with the CLI man page.
+
+Homebrew formulas should install those files into `bin`, `bash_completion`, `zsh_completion`, `fish_completion`, and `man1` respectively.
 
 ## Rust Best Practices (Template Defaults)
 

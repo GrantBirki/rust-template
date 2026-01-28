@@ -14,9 +14,9 @@ keywords = ["rust", "template"]
 categories = ["template"]
 
 [dependencies]
-
-[dev-dependencies]
-speculate2 = "=0.2.0"
+clap = { version = "=4.5.4", features = ["derive"] }
+clap_complete = "=4.5.2"
+clap_mangen = "=0.2.20"
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ["cfg(tarpaulin_include)"] }

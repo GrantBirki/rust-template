@@ -23,11 +23,6 @@ if [[ -z "$cargo_zigbuild_version" && -f "$DIR/.cargo-zigbuild-version" ]]; then
   cargo_zigbuild_version=$(head -n1 "$DIR/.cargo-zigbuild-version" | tr -d '[:space:]')
 fi
 
-if [[ -z "$cargo_zigbuild_version" ]]; then
-  echo -e "${RED}error:${OFF} CARGO_ZIGBUILD_VERSION not set and .cargo-zigbuild-version missing" >&2
-  exit 1
-fi
-
 ZIG_SHA256_X86_64_MACOS="${ZIG_SHA256_X86_64_MACOS:-375b6909fc1495d16fc2c7db9538f707456bfc3373b14ee83fdd3e22b3d43f7f}"
 ZIG_SHA256_AARCH64_MACOS="${ZIG_SHA256_AARCH64_MACOS:-3cc2bab367e185cdfb27501c4b30b1b0653c28d9f73df8dc91488e66ece5fa6b}"
 ZIG_SHA256_X86_64_LINUX="${ZIG_SHA256_X86_64_LINUX:-02aa270f183da276e5b5920b1dac44a63f1a49e55050ebde3aecc9eb82f93239}"
@@ -79,6 +74,13 @@ fi
 zig version
 
 cargo install --locked --version "$cargo_zigbuild_version" --force cargo-zigbuild
+
+if [[ -n "$cargo_zigbuild_version" ]]; then
+  installed_version=$(cargo zigbuild --version | awk '{print $2}')
+  if [[ "$installed_version" != "$cargo_zigbuild_version" ]]; then
+    echo -e "${RED}warning:${OFF} cargo-zigbuild version mismatch (expected ${cargo_zigbuild_version}, found ${installed_version})" >&2
+  fi
+fi
 
 if [[ -n "${RUSTUP_TARGETS:-}" ]]; then
   if ! command -v rustup >/dev/null 2>&1; then
