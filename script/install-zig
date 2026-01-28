@@ -66,9 +66,8 @@ mv "zig-${zig_arch}-${zig_os}-${zig_version}" "$zig_root"
 
 if [[ -n "${GITHUB_PATH:-}" ]]; then
   echo "$zig_root" >> "$GITHUB_PATH"
-else
-  export PATH="$zig_root:$PATH"
 fi
+export PATH="$zig_root:$PATH"
 
 zig version
 
