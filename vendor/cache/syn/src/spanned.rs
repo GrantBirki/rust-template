@@ -1,9 +1,6 @@
 //! A trait that can provide the `Span` of the complete contents of a syntax
 //! tree node.
 //!
-//! *This module is available only if Syn is built with both the `"parsing"` and
-//! `"printing"` features.*
-//!
 //! <br>
 //!
 //! # Example
@@ -14,7 +11,7 @@
 //! be able to pass a reference to one of those fields across threads.
 //!
 //! [`Type`]: crate::Type
-//! [`Sync`]: std::marker::Sync
+//! [`Sync`]: core::marker::Sync
 //!
 //! If the field type does *not* implement `Sync` as required, we want the
 //! compiler to report an error pointing out exactly which type it was.
@@ -56,7 +53,7 @@
 //! `Sync`. The errors they would see look like the following.
 //!
 //! ```text
-//! error[E0277]: the trait bound `*const i32: std::marker::Sync` is not satisfied
+//! error[E0277]: the trait bound `*const i32: core::marker::Sync` is not satisfied
 //!   --> src/main.rs:10:21
 //!    |
 //! 10 |     bad_field: *const i32,
@@ -96,10 +93,7 @@ use quote::spanned::Spanned as ToTokens;
 /// See the [module documentation] for an example.
 ///
 /// [module documentation]: self
-///
-/// *This trait is available only if Syn is built with both the `"parsing"` and
-/// `"printing"` features.*
-pub trait Spanned {
+pub trait Spanned: private::Sealed {
     /// Returns a `Span` covering the complete contents of this syntax tree
     /// node, or [`Span::call_site()`] if this node is empty.
     ///
@@ -111,4 +105,14 @@ impl<T: ?Sized + ToTokens> Spanned for T {
     fn span(&self) -> Span {
         self.__span()
     }
+}
+
+mod private {
+    use crate::spanned::ToTokens;
+
+    pub trait Sealed {}
+    impl<T: ?Sized + ToTokens> Sealed for T {}
+
+    #[cfg(any(feature = "full", feature = "derive"))]
+    impl Sealed for crate::QSelf {}
 }

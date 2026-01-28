@@ -1,0 +1,105 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+source script/env "$@"
+
+# This script is intentionally online-only (CI/tooling bootstrap).
+unset CARGO_NET_OFFLINE
+unset RUSTUP_OFFLINE
+
+zig_version="${ZIG_VERSION:-}"
+if [[ -z "$zig_version" && -f "$DIR/.zig-version" ]]; then
+  zig_version=$(head -n1 "$DIR/.zig-version" | tr -d '[:space:]')
+fi
+
+if [[ -z "$zig_version" ]]; then
+  die "ZIG_VERSION not set and .zig-version missing"
+fi
+
+cargo_zigbuild_version="${CARGO_ZIGBUILD_VERSION:-}"
+if [[ -z "$cargo_zigbuild_version" && -f "$DIR/.cargo-zigbuild-version" ]]; then
+  cargo_zigbuild_version=$(head -n1 "$DIR/.cargo-zigbuild-version" | tr -d '[:space:]')
+fi
+
+ZIG_SHA256_X86_64_MACOS="${ZIG_SHA256_X86_64_MACOS:-375b6909fc1495d16fc2c7db9538f707456bfc3373b14ee83fdd3e22b3d43f7f}"
+ZIG_SHA256_AARCH64_MACOS="${ZIG_SHA256_AARCH64_MACOS:-3cc2bab367e185cdfb27501c4b30b1b0653c28d9f73df8dc91488e66ece5fa6b}"
+ZIG_SHA256_X86_64_LINUX="${ZIG_SHA256_X86_64_LINUX:-02aa270f183da276e5b5920b1dac44a63f1a49e55050ebde3aecc9eb82f93239}"
+ZIG_SHA256_AARCH64_LINUX="${ZIG_SHA256_AARCH64_LINUX:-958ed7d1e00d0ea76590d27666efbf7a932281b3d7ba0c6b01b0ff26498f667f}"
+
+os="$(uname -s)"
+case "$os" in
+  Darwin) zig_os="macos" ;;
+  Linux) zig_os="linux" ;;
+  *) die "unsupported OS: $os" ;;
+esac
+
+arch="$(uname -m)"
+case "$arch" in
+  arm64|aarch64) zig_arch="aarch64" ;;
+  x86_64) zig_arch="x86_64" ;;
+  *) die "unsupported arch: $arch" ;;
+esac
+
+case "${zig_os}_${zig_arch}" in
+  macos_x86_64) zig_shasum="$ZIG_SHA256_X86_64_MACOS" ;;
+  macos_aarch64) zig_shasum="$ZIG_SHA256_AARCH64_MACOS" ;;
+  linux_x86_64) zig_shasum="$ZIG_SHA256_X86_64_LINUX" ;;
+  linux_aarch64) zig_shasum="$ZIG_SHA256_AARCH64_LINUX" ;;
+  *) die "unsupported zig target: ${zig_os}_${zig_arch}" ;;
+esac
+
+tarball="zig-${zig_arch}-${zig_os}-${zig_version}.tar.xz"
+url="https://ziglang.org/download/${zig_version}/${tarball}"
+curl -fsSL "$url" -o "$tarball"
+
+if command -v shasum >/dev/null 2>&1; then
+  echo "${zig_shasum}  ${tarball}" | shasum -a 256 -c -
+else
+  echo "${zig_shasum}  ${tarball}" | sha256sum -c -
+fi
+
+tar -xJf "$tarball"
+zig_root="${RUNNER_TEMP:-/tmp}/zig-${zig_arch}-${zig_os}-${zig_version}"
+rm -rf "$zig_root"
+mv "zig-${zig_arch}-${zig_os}-${zig_version}" "$zig_root"
+
+if [[ -n "${GITHUB_PATH:-}" ]]; then
+  echo "$zig_root" >> "$GITHUB_PATH"
+fi
+export PATH="$zig_root:$PATH"
+
+zig version
+
+if [[ -z "$cargo_zigbuild_version" ]]; then
+  die "CARGO_ZIGBUILD_VERSION not set and .cargo-zigbuild-version missing"
+fi
+
+installed_version=""
+if command -v cargo-zigbuild >/dev/null 2>&1; then
+  installed_version=$(cargo-zigbuild --version | awk '{print $2}')
+fi
+
+if [[ "$installed_version" != "$cargo_zigbuild_version" ]]; then
+  tmpdir="$(mktemp -d)"
+  (
+    cd "$tmpdir"
+    cargo install --locked --version "$cargo_zigbuild_version" cargo-zigbuild
+  )
+  rm -rf "$tmpdir"
+  installed_version=$(cargo-zigbuild --version | awk '{print $2}')
+fi
+
+if [[ "$installed_version" != "$cargo_zigbuild_version" ]]; then
+  warn "cargo-zigbuild version mismatch (expected ${cargo_zigbuild_version}, found ${installed_version})"
+fi
+
+if [[ -n "${RUSTUP_TARGETS:-}" ]]; then
+  require_cmd rustup
+  IFS=',' read -r -a targets <<< "$RUSTUP_TARGETS"
+  for target in "${targets[@]}"; do
+    if [[ -n "$target" ]]; then
+      rustup target add "$target"
+    fi
+  done
+fi

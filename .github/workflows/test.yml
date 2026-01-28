@@ -21,9 +21,7 @@ jobs:
 
     steps:
       - name: checkout
-        uses: actions/checkout@v6
-
-      - uses: actions-rust-lang/setup-rust-toolchain@1780873c7b576612439a134613cc4cc74ce5538c # pin@v1
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # pin@v6.0.2
 
       - name: bootstrap
         run: script/bootstrap
