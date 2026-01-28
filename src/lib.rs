@@ -7,14 +7,13 @@ pub use math::{add, subtract};
 
 pub fn greet(name: &str, shout: bool, times: u8) -> String {
     let base = format!("Hello, {name}!");
-    let message = if shout {
-        base.to_uppercase()
-    } else {
-        base
-    };
+    let message = if shout { base.to_uppercase() } else { base };
 
     let repeat = times.max(1);
-    (0..repeat).map(|_| message.clone()).collect::<Vec<_>>().join("\n")
+    (0..repeat)
+        .map(|_| message.clone())
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 pub struct VersionInfo {

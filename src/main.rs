@@ -1,13 +1,17 @@
 #![forbid(unsafe_code)]
 
 use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
-use clap_complete::{generate, Shell};
+use clap_complete::{Shell, generate};
 use clap_mangen::Man;
 use rust_template::{add, greet, subtract, version_info};
 use std::io;
 
 #[derive(Parser)]
-#[command(name = "rust-template", about = "Minimal hello-world CLI template", version)]
+#[command(
+    name = "rust-template",
+    about = "Minimal hello-world CLI template",
+    version
+)]
 struct Cli {
     /// Who to greet.
     #[arg(short, long, default_value = "world")]
