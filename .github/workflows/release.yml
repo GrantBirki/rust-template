@@ -14,7 +14,7 @@ jobs:
   prepare:
     if: github.repository == 'grantbirki/rust-template' # change this to your repository
     permissions:
-      contents: write
+      contents: read
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
@@ -26,7 +26,7 @@ jobs:
         uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # pin@v6.0.1
         with:
           fetch-depth: 0
-          persist-credentials: true
+          persist-credentials: false
 
       - name: determine version + tag
         id: version
@@ -42,23 +42,29 @@ jobs:
           version_tag="v${version}"
 
           should_release="false"
-          if git cat-file -e "${{ github.event.before }}:Cargo.toml" 2>/dev/null; then
-            previous=$(git show "${{ github.event.before }}:Cargo.toml" \
-              | sed -n 's/^version[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' \
-              | head -n1)
-            if [[ "$previous" != "$version" ]]; then
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            should_release="true"
+          else
+            if git cat-file -e "${{ github.event.before }}:Cargo.toml" 2>/dev/null; then
+              previous=$(git show "${{ github.event.before }}:Cargo.toml" \
+                | sed -n 's/^version[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' \
+                | head -n1)
+              if [[ "$previous" != "$version" ]]; then
+                should_release="true"
+              fi
+            else
               should_release="true"
             fi
-          else
-            should_release="true"
-          fi
 
-          if ! git diff --name-only "${{ github.event.before }}" "${{ github.sha }}" | grep -qx "Cargo.toml"; then
-            should_release="false"
+            if ! git diff --name-only "${{ github.event.before }}" "${{ github.sha }}" | grep -qx "Cargo.toml"; then
+              should_release="false"
+            fi
           fi
 
           if git rev-parse "$version_tag" >/dev/null 2>&1; then
-            should_release="false"
+            if [[ "${{ github.event_name }}" != "workflow_dispatch" ]]; then
+              should_release="false"
+            fi
           fi
 
           echo "version=${version}" >> "$GITHUB_OUTPUT"
@@ -69,11 +75,6 @@ jobs:
             echo "No version bump detected; skipping release."
             exit 0
           fi
-
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -a "$version_tag" -m "$version_tag"
-          git push origin "$version_tag"
 
   build-linux:
     if: needs.prepare.outputs.should_release == 'true' && github.repository == 'grantbirki/rust-template' # change this to your repository
@@ -169,8 +170,6 @@ jobs:
           name: dist-macos
           path: dist/macos
 
-      # TODO cut a new release and push it around here using the gh cli
-
       - name: merge release artifacts
         run: |
           set -euo pipefail
@@ -222,18 +221,24 @@ jobs:
           echo "Release artifacts (dist/merged):"
           ls -lah dist/merged
 
+      - name: ensure release tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          tag="${{ needs.prepare.outputs.version_tag }}"
+          if ! gh release view "$tag" >/dev/null 2>&1; then
+            gh release create "$tag" --title "$tag" --notes "Release $tag" --target "${{ github.sha }}"
+          fi
+
       - name: publish release assets
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
         run: |
           tag="${{ needs.prepare.outputs.version_tag }}"
-
-          if gh release view "$tag" >/dev/null 2>&1; then
-            gh release upload "$tag" dist/merged/* --clobber
-          else
-            gh release create "$tag" dist/merged/* --title "$tag" --notes "Release $tag"
-          fi
+          gh release upload "$tag" dist/merged/* --clobber
 
       - name: upload artifact
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # pin@v5.0.0

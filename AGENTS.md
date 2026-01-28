@@ -70,7 +70,7 @@ CI must be air-gapped for build/test/lint:
 ## Release Flow
 
 - `Cargo.toml` `version` is the single trigger for releases.
-- When `Cargo.toml` version changes on `main`, CI auto-tags `vX.Y.Z` and publishes release artifacts.
+- When `Cargo.toml` version changes on `main`, CI builds first, then auto-tags `vX.Y.Z` and publishes release artifacts.
 
 ## Cross-Platform + Universal macOS Builds
 

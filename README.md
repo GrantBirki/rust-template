@@ -92,7 +92,7 @@ Releases are triggered by version bumps in `Cargo.toml`:
 
 1. Update `version = "X.Y.Z"` in `Cargo.toml`.
 2. Commit the change, open a PR, and merge to `main`.
-3. The release workflow detects the version bump, creates the `vX.Y.Z` tag, builds artifacts, and publishes a GitHub release.
+3. The release workflow detects the version bump, builds artifacts, then creates the `vX.Y.Z` tag and publishes a GitHub release.
 
 Do not create or push tags manually; CI is the source of truth for tags and releases.
 
