@@ -71,13 +71,27 @@ export PATH="$zig_root:$PATH"
 
 zig version
 
-cargo install --locked cargo-zigbuild
+if [[ -z "$cargo_zigbuild_version" ]]; then
+  die "CARGO_ZIGBUILD_VERSION not set and .cargo-zigbuild-version missing"
+fi
 
-if [[ -n "$cargo_zigbuild_version" ]]; then
-  installed_version=$(cargo zigbuild --version | awk '{print $2}')
-  if [[ "$installed_version" != "$cargo_zigbuild_version" ]]; then
-    warn "cargo-zigbuild version mismatch (expected ${cargo_zigbuild_version}, found ${installed_version})"
-  fi
+installed_version=""
+if command -v cargo-zigbuild >/dev/null 2>&1; then
+  installed_version=$(cargo-zigbuild --version | awk '{print $2}')
+fi
+
+if [[ "$installed_version" != "$cargo_zigbuild_version" ]]; then
+  tmpdir="$(mktemp -d)"
+  (
+    cd "$tmpdir"
+    cargo install --locked --version "$cargo_zigbuild_version" cargo-zigbuild
+  )
+  rm -rf "$tmpdir"
+  installed_version=$(cargo-zigbuild --version | awk '{print $2}')
+fi
+
+if [[ "$installed_version" != "$cargo_zigbuild_version" ]]; then
+  warn "cargo-zigbuild version mismatch (expected ${cargo_zigbuild_version}, found ${installed_version})"
 fi
 
 if [[ -n "${RUSTUP_TARGETS:-}" ]]; then

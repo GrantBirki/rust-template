@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - "Cargo.toml"
+  workflow_dispatch:
 
 permissions: {}
 
@@ -167,6 +168,8 @@ jobs:
         with:
           name: dist-macos
           path: dist/macos
+
+      # TODO cut a new release and push it around here using the gh cli
 
       - name: merge release artifacts
         run: |
