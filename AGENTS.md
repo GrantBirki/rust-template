@@ -30,7 +30,6 @@ All scripts are in `script/` and are offline-first.
 - `script/lint`: format + clippy + docs; treats warnings as errors.
 - `script/build`: builds release binaries (host by default). Use `--release` with `--targets` for dist packaging; supports `--universal-darwin` and generates `dist/docs` (completions + man page).
 - `script/server`: runs the app/CLI via `cargo run --frozen`.
-- `script/release`: optional manual tag helper (release is normally driven by `Cargo.toml` version bumps).
 
 ## Toolchain + Version Managers
 

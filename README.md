@@ -26,7 +26,7 @@ A starter template for Rust projects.
 4. Run `script/lint` to run the linter
 5. Run `script/build` to build the project
 6. Run `script/server` to run the app (or CLI)
-7. Bump `version` in `Cargo.toml` and merge to `main` to trigger a release (no manual tags)
+7. Bump `version` in `Cargo.toml` and merge to `main` to trigger a release (CI creates the tag)
 
 ## CLI Usage (Example)
 
@@ -85,6 +85,16 @@ script/update
 ```
 
 This refreshes `Cargo.lock` and regenerates `vendor/cache`. All other scripts are offline-by-default.
+
+## Release Process
+
+Releases are triggered by version bumps in `Cargo.toml`:
+
+1. Update `version = "X.Y.Z"` in `Cargo.toml`.
+2. Commit the change, open a PR, and merge to `main`.
+3. The release workflow detects the version bump, creates the `vX.Y.Z` tag, builds artifacts, and publishes a GitHub release.
+
+Do not create or push tags manually; CI is the source of truth for tags and releases.
 
 ## Verifying Release Artifacts
 
