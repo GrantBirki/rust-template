@@ -2,17 +2,86 @@ name: release
 
 on:
   push:
-    tags:
-      - "*"
+    branches:
+      - main
+    paths:
+      - "Cargo.toml"
 
 permissions: {}
 
 jobs:
-  build-linux:
+  prepare:
     if: github.repository == 'grantbirki/rust-template' # change this to your repository
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      version_tag: ${{ steps.version.outputs.version_tag }}
+      should_release: ${{ steps.version.outputs.should_release }}
+
+    steps:
+      - name: checkout
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # pin@v6.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: determine version + tag
+        id: version
+        run: |
+          set -euo pipefail
+          git fetch --tags --force
+
+          version=$(sed -n 's/^version[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' Cargo.toml | head -n1)
+          if [[ -z "$version" ]]; then
+            echo "could not parse version from Cargo.toml" >&2
+            exit 1
+          fi
+          version_tag="v${version}"
+
+          should_release="false"
+          if git cat-file -e "${{ github.event.before }}:Cargo.toml" 2>/dev/null; then
+            previous=$(git show "${{ github.event.before }}:Cargo.toml" \
+              | sed -n 's/^version[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' \
+              | head -n1)
+            if [[ "$previous" != "$version" ]]; then
+              should_release="true"
+            fi
+          else
+            should_release="true"
+          fi
+
+          if ! git diff --name-only "${{ github.event.before }}" "${{ github.sha }}" | grep -qx "Cargo.toml"; then
+            should_release="false"
+          fi
+
+          if git rev-parse "$version_tag" >/dev/null 2>&1; then
+            should_release="false"
+          fi
+
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "version_tag=${version_tag}" >> "$GITHUB_OUTPUT"
+          echo "should_release=${should_release}" >> "$GITHUB_OUTPUT"
+
+          if [[ "$should_release" != "true" ]]; then
+            echo "No version bump detected; skipping release."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "$version_tag" -m "$version_tag"
+          git push origin "$version_tag"
+
+  build-linux:
+    if: needs.prepare.outputs.should_release == 'true' && github.repository == 'grantbirki/rust-template' # change this to your repository
+    needs: prepare
     permissions:
       contents: read
     runs-on: ubuntu-latest
+    env:
+      BUILD_VERSION: ${{ needs.prepare.outputs.version_tag }}
 
     steps:
       - name: checkout
@@ -43,10 +112,13 @@ jobs:
           if-no-files-found: error
 
   build-macos:
-    if: github.repository == 'grantbirki/rust-template' # change this to your repository
+    if: needs.prepare.outputs.should_release == 'true' && github.repository == 'grantbirki/rust-template' # change this to your repository
+    needs: prepare
     permissions:
       contents: read
     runs-on: macos-latest
+    env:
+      BUILD_VERSION: ${{ needs.prepare.outputs.version_tag }}
 
     steps:
       - name: checkout
@@ -77,8 +149,8 @@ jobs:
           if-no-files-found: error
 
   release:
-    if: github.repository == 'grantbirki/rust-template' # change this to your repository
-    needs: [build-linux, build-macos]
+    if: needs.prepare.outputs.should_release == 'true' && github.repository == 'grantbirki/rust-template' # change this to your repository
+    needs: [prepare, build-linux, build-macos]
     permissions:
       contents: write
     runs-on: ubuntu-latest
@@ -152,7 +224,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
         run: |
-          tag="${GITHUB_REF_NAME}"
+          tag="${{ needs.prepare.outputs.version_tag }}"
 
           if gh release view "$tag" >/dev/null 2>&1; then
             gh release upload "$tag" dist/merged/* --clobber

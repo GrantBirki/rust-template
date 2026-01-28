@@ -26,7 +26,7 @@ A starter template for Rust projects.
 4. Run `script/lint` to run the linter
 5. Run `script/build` to build the project
 6. Run `script/server` to run the app (or CLI)
-7. Run `script/release` to create a new release
+7. Bump `version` in `Cargo.toml` and merge to `main` to trigger a release (no manual tags)
 
 ## CLI Usage (Example)
 

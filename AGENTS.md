@@ -30,7 +30,7 @@ All scripts are in `script/` and are offline-first.
 - `script/lint`: format + clippy + docs; treats warnings as errors.
 - `script/build`: builds release binaries (host by default). Use `--release` with `--targets` for dist packaging; supports `--universal-darwin` and generates `dist/docs` (completions + man page).
 - `script/server`: runs the app/CLI via `cargo run --frozen`.
-- `script/release`: tags and pushes a new release.
+- `script/release`: optional manual tag helper (release is normally driven by `Cargo.toml` version bumps).
 
 ## Toolchain + Version Managers
 
@@ -67,6 +67,11 @@ CI must be air-gapped for build/test/lint:
 - Ensure all actions are pinned to commit SHAs.
 - CI should run `script/bootstrap` before any build/test/lint.
 - Offline defaults come from `script/env`, so workflows do not need explicit `CARGO_NET_OFFLINE`/`RUSTUP_OFFLINE` env blocks.
+
+## Release Flow
+
+- `Cargo.toml` `version` is the single trigger for releases.
+- When `Cargo.toml` version changes on `main`, CI auto-tags `vX.Y.Z` and publishes release artifacts.
 
 ## Cross-Platform + Universal macOS Builds
 
