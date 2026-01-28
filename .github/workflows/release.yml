@@ -24,6 +24,8 @@ jobs:
       - uses: actions-rust-lang/setup-rust-toolchain@1780873c7b576612439a134613cc4cc74ce5538c # pin@v1
 
       - name: install zig + cargo-zigbuild
+        env:
+          RUSTUP_TARGETS: "aarch64-unknown-linux-gnu"
         run: script/install-zig
 
       - name: bootstrap
@@ -56,6 +58,8 @@ jobs:
       - uses: actions-rust-lang/setup-rust-toolchain@1780873c7b576612439a134613cc4cc74ce5538c # pin@v1
 
       - name: install zig + cargo-zigbuild
+        env:
+          RUSTUP_TARGETS: "x86_64-apple-darwin,aarch64-apple-darwin"
         run: script/install-zig
 
       - name: bootstrap

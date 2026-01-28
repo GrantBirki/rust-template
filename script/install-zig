@@ -79,3 +79,16 @@ fi
 zig version
 
 cargo install --locked --version "$cargo_zigbuild_version" --force cargo-zigbuild
+
+if [[ -n "${RUSTUP_TARGETS:-}" ]]; then
+  if ! command -v rustup >/dev/null 2>&1; then
+    echo -e "${RED}error:${OFF} rustup is required to install targets" >&2
+    exit 1
+  fi
+  IFS=',' read -r -a targets <<< "$RUSTUP_TARGETS"
+  for target in "${targets[@]}"; do
+    if [[ -n "$target" ]]; then
+      rustup target add "$target"
+    fi
+  done
+fi

@@ -25,7 +25,7 @@ All scripts are in `script/` and are offline-first.
 
 - `script/bootstrap`: validates the toolchain and vendor cache, then performs a frozen build check.
 - `script/update`: **online-only** dependency update + re-vendor. Use this to refresh `Cargo.lock` and `vendor/cache`.
-- `script/install-zig`: **online-only** CI helper that installs pinned Zig + cargo-zigbuild for cross-target releases.
+- `script/install-zig`: **online-only** CI helper that installs pinned Zig + cargo-zigbuild for cross-target releases. Accepts `RUSTUP_TARGETS` to install extra targets.
 - `script/test`: runs tests; `--cov` requires preinstalled `cargo-tarpaulin`, `jq`, and `bc`.
 - `script/lint`: format + clippy + docs; treats warnings as errors.
 - `script/build`: builds release binaries (host by default). Use `--release` with `--targets` for dist packaging; supports `--universal-darwin`.
