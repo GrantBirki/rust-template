@@ -238,7 +238,12 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           tag="${{ needs.prepare.outputs.version_tag }}"
-          gh release upload "$tag" dist/merged/* --clobber
+          mapfile -d '' files < <(find dist/merged -maxdepth 1 -type f -print0)
+          if [[ ${#files[@]} -eq 0 ]]; then
+            echo "No release files found in dist/merged"
+            exit 1
+          fi
+          gh release upload "$tag" "${files[@]}" --clobber
 
       - name: upload artifact
         uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # pin@v5.0.0
