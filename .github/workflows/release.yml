@@ -197,13 +197,17 @@ jobs:
             esac
             if [[ -f "$file" ]]; then
               base="$(basename "$file")"
+              binary_name="${base%%_v*}"
+              if [[ -z "$binary_name" || "$binary_name" == "$base" ]]; then
+                binary_name="$base"
+              fi
               stage_dir="$staging/$base"
               mkdir -p "$stage_dir"
-              cp "$file" "$stage_dir/"
+              cp "$file" "$stage_dir/$binary_name"
               if [[ -d "$docs_dir" ]]; then
                 cp -R "$docs_dir"/* "$stage_dir/" 2>/dev/null || true
               fi
-              chmod +x "$stage_dir/$base"
+              chmod +x "$stage_dir/$binary_name"
               (cd "$stage_dir" && tar -czf "../../${base}.tar.gz" .)
             fi
           done
