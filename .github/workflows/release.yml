@@ -155,6 +155,9 @@ jobs:
     needs: [prepare, build-linux, build-macos]
     permissions:
       contents: write
+    concurrency:
+      group: release-${{ needs.prepare.outputs.version_tag }}
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     outputs:
       artifact-id: ${{ steps.upload-artifact.outputs.artifact-id }}

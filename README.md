@@ -85,6 +85,7 @@ script/update
 ```
 
 This refreshes `Cargo.lock` and regenerates `vendor/cache`. All other scripts are offline-by-default.
+It also runs `cargo audit` (and will install `cargo-audit` if missing).
 
 ## Release Process
 

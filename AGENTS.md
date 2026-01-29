@@ -24,7 +24,7 @@ This repository is a Rust template optimized for hermetic, reproducible, air-gap
 All scripts are in `script/` and are offline-first.
 
 - `script/bootstrap`: validates the toolchain and vendor cache, then performs a frozen build check.
-- `script/update`: **online-only** dependency update + re-vendor. Use this to refresh `Cargo.lock` and `vendor/cache`.
+- `script/update`: **online-only** dependency update + re-vendor + security audit (cargo-audit). Use this to refresh `Cargo.lock` and `vendor/cache`.
 - `script/install-zig`: **online-only** CI helper that installs pinned Zig + `cargo-zigbuild` (locked) for cross-target releases. Accepts `RUSTUP_TARGETS` to install extra targets.
 - `script/test`: runs tests; `--cov` requires preinstalled `cargo-llvm-cov` and the `llvm-tools-preview` rustup component.
 - `script/lint`: format + clippy + docs; treats warnings as errors.

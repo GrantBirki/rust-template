@@ -4,6 +4,9 @@ set -e # prevent any kind of script failures
 
 source script/env "$@"
 
+require_cmd rustc
+require_cmd cargo
+
 echo -e "Rust version: ${GREEN}${RUST_VERSION}${OFF}"
 
 ensure_rust_toolchain

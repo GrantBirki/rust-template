@@ -18,6 +18,22 @@ trap 'mv .cargo/config.toml.bak .cargo/config.toml' EXIT
 cargo update
 cargo vendor --locked "$VENDOR_DIR"
 
+# Run security audit while online (advisory DB update requires network).
+cargo_audit_version="${CARGO_AUDIT_VERSION:-}"
+if [[ -z "$cargo_audit_version" && -f "$DIR/.cargo-audit-version" ]]; then
+  cargo_audit_version=$(head -n1 "$DIR/.cargo-audit-version" | tr -d '[:space:]')
+fi
+
+if ! command -v cargo-audit >/dev/null 2>&1; then
+  if [[ -n "$cargo_audit_version" ]]; then
+    cargo install --locked --version "$cargo_audit_version" cargo-audit
+  else
+    cargo install --locked cargo-audit
+  fi
+fi
+
+cargo audit
+
 # Restore config before verifying offline build.
 trap - EXIT
 mv .cargo/config.toml.bak .cargo/config.toml

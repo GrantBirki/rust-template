@@ -30,7 +30,11 @@ TARBALL_DIR="$DIR/tarballs"
 export TARBALL_DIR
 
 # set the rust version to the one specified from the rustc --version command
-RUST_VERSION=$(rustc --version | cut -d ' ' -f2)
+if command -v rustc >/dev/null 2>&1; then
+  RUST_VERSION=$(rustc --version | cut -d ' ' -f2)
+else
+  RUST_VERSION="missing"
+fi
 export RUST_VERSION
 
 # detect OS version and architecture
