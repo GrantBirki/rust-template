@@ -301,3 +301,40 @@ jobs:
             # Run the command
             gh attestation verify "$file" --repo ${OWNER}/${REPO} --signer-workflow ${OWNER}/${REPO}/.github/workflows/release.yml
           done
+
+  release-summary:
+    permissions: {}
+    runs-on: ubuntu-latest
+    needs: [prepare, release, verify]
+    steps:
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # pin@7.0.0
+        with:
+          artifact-ids: ${{ needs.release.outputs.artifact-id }}
+          path: "dist/"
+
+      - name: show homebrew inputs
+        run: |
+          set -euo pipefail
+          version="${{ needs.prepare.outputs.version }}"
+          tag="${{ needs.prepare.outputs.version_tag }}"
+          echo "Release version: ${version}"
+          echo "Release tag: ${tag}"
+          echo "Commit: ${{ github.sha }}"
+          echo
+          if [[ ! -f dist/checksums.txt ]]; then
+            echo "checksums.txt not found"
+            exit 1
+          fi
+          echo "Homebrew sha256 (tarballs for this release):"
+          tarball_count=0
+          while read -r sha file; do
+            if [[ "$file" == *.tar.gz ]]; then
+              printf "sha256 %s  %s\n" "$sha" "$file"
+              tarball_count=$((tarball_count + 1))
+            fi
+          done < dist/checksums.txt
+
+          if [[ "$tarball_count" -eq 0 ]]; then
+            echo "no tarballs found in dist/checksums.txt"
+            exit 1
+          fi
