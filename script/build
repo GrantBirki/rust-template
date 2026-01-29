@@ -255,9 +255,12 @@ for target in "${targets[@]}"; do
     assert_tool_version "zig" "$DIR/.zig-version" "$(zig version | head -n1)"
     if [[ -f "$DIR/.cargo-zigbuild-version" ]]; then
       expected=$(head -n1 "$DIR/.cargo-zigbuild-version" | tr -d '[:space:]')
-      installed=$(cargo zigbuild --version | awk '{print $2}')
-      if [[ -n "$expected" && "$installed" != "$expected" ]]; then
+      installed=$(cargo-zigbuild --version 2>/dev/null | awk '{print $2}')
+      if [[ -n "$installed" && "$installed" != "$expected" ]]; then
         warn "cargo-zigbuild version mismatch (expected ${expected}, found ${installed})"
+      fi
+      if [[ -z "$installed" ]]; then
+        warn "could not determine cargo-zigbuild version"
       fi
     fi
     build_cmd=(cargo zigbuild)

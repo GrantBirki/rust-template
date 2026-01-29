@@ -209,11 +209,14 @@ jobs:
           done
           rm -rf "$staging"
 
-          if command -v shasum >/dev/null 2>&1; then
-            find . -maxdepth 1 -type f ! -name 'checksums.txt' -print0 | xargs -0 shasum -a 256 > checksums.txt
-          else
-            find . -maxdepth 1 -type f ! -name 'checksums.txt' -print0 | xargs -0 sha256sum > checksums.txt
-          fi
+          (
+            cd dist/merged
+            if command -v shasum >/dev/null 2>&1; then
+              find . -maxdepth 1 -type f ! -name 'checksums.txt' -print0 | xargs -0 shasum -a 256 > checksums.txt
+            else
+              find . -maxdepth 1 -type f ! -name 'checksums.txt' -print0 | xargs -0 sha256sum > checksums.txt
+            fi
+          )
 
       - name: show artifact sizes
         run: |
