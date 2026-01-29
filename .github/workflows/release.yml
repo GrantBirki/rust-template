@@ -320,6 +320,8 @@ jobs:
           set -euo pipefail
           version="${{ needs.prepare.outputs.version }}"
           tag="${{ needs.prepare.outputs.version_tag }}"
+          purple=$'\033[0;35m'
+          off=$'\033[0m'
           echo "Release version: ${version}"
           echo "Release tag: ${tag}"
           echo "Commit: ${{ github.sha }}"
@@ -332,7 +334,7 @@ jobs:
           tarball_count=0
           while read -r sha file; do
             if [[ "$file" == *.tar.gz ]]; then
-              printf "sha256 %s  %s\n" "$sha" "$file"
+              printf "sha256 %b%s%b  %s\n" "$purple" "$sha" "$off" "$file"
               tarball_count=$((tarball_count + 1))
             fi
           done < dist/checksums.txt
