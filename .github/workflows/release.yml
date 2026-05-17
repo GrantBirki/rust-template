@@ -92,7 +92,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - uses: actions-rust-lang/setup-rust-toolchain@1780873c7b576612439a134613cc4cc74ce5538c # pin@v1
+      - uses: actions-rust-lang/setup-rust-toolchain@150fca883cd4034361b621bd4e6a9d34e5143606 # pin@v1
 
       - name: install zig + cargo-zigbuild
         env:
@@ -106,7 +106,7 @@ jobs:
         run: script/build --release --targets "x86_64-unknown-linux-gnu,aarch64-unknown-linux-gnu"
 
       - name: upload artifact
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # pin@v6.0.0
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # pin@v7.0.0
         with:
           name: dist-linux
           path: dist/
@@ -129,7 +129,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - uses: actions-rust-lang/setup-rust-toolchain@1780873c7b576612439a134613cc4cc74ce5538c # pin@v1
+      - uses: actions-rust-lang/setup-rust-toolchain@150fca883cd4034361b621bd4e6a9d34e5143606 # pin@v1
 
       - name: install zig + cargo-zigbuild
         env:
@@ -143,7 +143,7 @@ jobs:
         run: script/build --release --targets "x86_64-apple-darwin,aarch64-apple-darwin" --universal-darwin
 
       - name: upload artifact
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # pin@v6.0.0
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # pin@v7.0.0
         with:
           name: dist-macos
           path: dist/
@@ -163,12 +163,12 @@ jobs:
       artifact-id: ${{ steps.upload-artifact.outputs.artifact-id }}
 
     steps:
-      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # pin@7.0.0
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # pin@8.0.1
         with:
           name: dist-linux
           path: dist/linux
 
-      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # pin@7.0.0
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # pin@8.0.1
         with:
           name: dist-macos
           path: dist/macos
@@ -256,7 +256,7 @@ jobs:
           gh release upload "$tag" "${files[@]}" --clobber
 
       - name: upload artifact
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # pin@v6.0.0
+        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # pin@v7.0.0
         id: upload-artifact
         with:
           name: dist
@@ -272,13 +272,13 @@ jobs:
       attestations: write
       contents: read
     steps:
-      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # pin@7.0.0
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # pin@8.0.1
         with:
           artifact-ids: ${{ needs.release.outputs.artifact-id }}
           path: "dist/"
 
       - name: attest build provenance
-        uses: actions/attest-build-provenance@96278af6caaf10aea03fd8d33a09a777ca52d62f # pin@v3.2.0
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # pin@v4.1.0
         with:
           subject-path: "dist/"
 
@@ -287,7 +287,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [release, sign]
     steps:
-      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # pin@7.0.0
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # pin@8.0.1
         with:
           artifact-ids: ${{ needs.release.outputs.artifact-id }}
           path: "dist/"
@@ -317,7 +317,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [prepare, release, verify]
     steps:
-      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # pin@7.0.0
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # pin@8.0.1
         with:
           artifact-ids: ${{ needs.release.outputs.artifact-id }}
           path: "dist/"
