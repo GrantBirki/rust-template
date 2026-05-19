@@ -1,0 +1,149 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+source script/env "$@"
+
+release_tools_dir="$DIR/vendor/release-tools"
+manifest="$release_tools_dir/manifest.toml"
+
+if [[ ! -f "$manifest" ]]; then
+  die "missing release-tool manifest: $manifest"
+fi
+
+sha256_file() {
+  local file="$1"
+  if command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$file" | awk '{print $1}'
+  else
+    sha256sum "$file" | awk '{print $1}'
+  fi
+}
+
+manifest_value() {
+  local key="$1"
+  sed -n "s/^${key}[[:space:]]*=[[:space:]]*\"\([^\"]*\)\"/\\1/p" "$manifest" | head -n1
+}
+
+zig_entries() {
+  awk '
+    function value(line) {
+      sub(/^[^=]*= "/, "", line)
+      sub(/"$/, "", line)
+      return line
+    }
+    /^\[\[zig\]\]/ {
+      if (in_zig && platform != "") {
+        print platform "|" path "|" sha256 "|" version
+      }
+      in_zig = 1
+      platform = path = sha256 = version = ""
+      next
+    }
+    /^\[/ {
+      if (in_zig && platform != "") {
+        print platform "|" path "|" sha256 "|" version
+      }
+      in_zig = 0
+      next
+    }
+    in_zig && $1 == "platform" { platform = value($0) }
+    in_zig && $1 == "path" { path = value($0) }
+    in_zig && $1 == "sha256" { sha256 = value($0) }
+    in_zig && $1 == "version" { version = value($0) }
+    END {
+      if (in_zig && platform != "") {
+        print platform "|" path "|" sha256 "|" version
+      }
+    }
+  ' "$manifest"
+}
+
+zig_version="$(read_version_file "$DIR/.zig-version")"
+cargo_zigbuild_version="$(read_version_file "$DIR/.cargo-zigbuild-version")"
+manifest_zig_version="$(manifest_value "zig_version")"
+manifest_zigbuild_version="$(manifest_value "cargo_zigbuild_version")"
+
+if [[ "$manifest_zig_version" != "$zig_version" ]]; then
+  die "manifest Zig version mismatch (expected ${zig_version}, found ${manifest_zig_version:-missing})"
+fi
+
+if [[ "$manifest_zigbuild_version" != "$cargo_zigbuild_version" ]]; then
+  die "manifest cargo-zigbuild version mismatch (expected ${cargo_zigbuild_version}, found ${manifest_zigbuild_version:-missing})"
+fi
+
+zig_count=0
+while IFS='|' read -r platform path sha256 version; do
+  zig_count=$((zig_count + 1))
+  if [[ -z "$platform" || -z "$path" || -z "$sha256" || -z "$version" ]]; then
+    die "invalid Zig entry in release-tool manifest"
+  fi
+  if [[ "$version" != "$zig_version" ]]; then
+    die "Zig entry version mismatch for ${platform}"
+  fi
+  artifact="$DIR/$path"
+  if [[ ! -f "$artifact" ]]; then
+    die "missing Zig artifact: $path"
+  fi
+  actual="$(sha256_file "$artifact")"
+  if [[ "$actual" != "$sha256" ]]; then
+    die "Zig checksum mismatch for $path"
+  fi
+done < <(zig_entries)
+
+if [[ "$zig_count" -ne 4 ]]; then
+  die "expected 4 vendored Zig artifacts, found $zig_count"
+fi
+
+cargo_crate_path="$(manifest_value "crate_path")"
+cargo_crate_sha256="$(manifest_value "crate_sha256")"
+cargo_source_dir="$(manifest_value "source_dir")"
+cargo_vendor_dir="$(manifest_value "vendor_dir")"
+
+if [[ -z "$cargo_crate_path" || -z "$cargo_crate_sha256" || -z "$cargo_source_dir" || -z "$cargo_vendor_dir" ]]; then
+  die "manifest is missing cargo-zigbuild fields"
+fi
+
+cargo_crate="$DIR/$cargo_crate_path"
+if [[ ! -f "$cargo_crate" ]]; then
+  die "missing cargo-zigbuild crate artifact: $cargo_crate_path"
+fi
+
+actual_crate_sha256="$(sha256_file "$cargo_crate")"
+if [[ "$actual_crate_sha256" != "$cargo_crate_sha256" ]]; then
+  die "cargo-zigbuild crate checksum mismatch"
+fi
+
+if [[ ! -f "$DIR/$cargo_source_dir/Cargo.toml" || ! -f "$DIR/$cargo_source_dir/Cargo.lock" ]]; then
+  die "missing cargo-zigbuild source or lockfile"
+fi
+
+if [[ ! -d "$DIR/$cargo_vendor_dir" || -z "$(ls -A "$DIR/$cargo_vendor_dir" 2>/dev/null)" ]]; then
+  die "missing cargo-zigbuild vendored dependencies"
+fi
+
+require_pattern() {
+  local file="$1"
+  local pattern="$2"
+  local description="$3"
+
+  if ! grep -qE "$pattern" "$file"; then
+    die "$description"
+  fi
+}
+
+for workflow in "$DIR/.github/workflows/build.yml" "$DIR/.github/workflows/release.yml"; do
+  if grep -nE '\bcurl\b|cargo install[[:space:]].*--version|rustup target add|setup-rust-toolchain' "$workflow"; then
+    die "${workflow#$DIR/} contains networked release-tool installation commands"
+  fi
+done
+
+require_pattern "$DIR/.github/workflows/build.yml" 'script/install-zig' "build workflow must exercise vendored release-tool installation"
+require_pattern "$DIR/.github/workflows/build.yml" 'script/verify-release-toolchain' "build workflow must verify the release toolchain"
+require_pattern "$DIR/.github/workflows/build.yml" 'script/build --release' "build workflow must run release-mode packaging"
+
+if grep -nE '\bcurl\b|cargo install[[:space:]].*--version|rustup target add|unset CARGO_NET_OFFLINE|unset RUSTUP_OFFLINE' "$DIR/script/install-zig"; then
+  die "script/install-zig must remain offline-only"
+fi
+
+echo -e "${GREEN}release-tool manifest verified${OFF}"

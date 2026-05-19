@@ -1,6 +1,6 @@
 #! /usr/bin/env bash
 
-set -e # prevent any kind of script failures
+set -euo pipefail
 
 source script/env "$@"
 
@@ -9,34 +9,92 @@ unset RUSTUP_OFFLINE
 
 echo -e "Rust version: ${GREEN}${RUST_VERSION}${OFF}"
 
-# temp rename the .cargo/config.toml file so we can update and re-vendor
-mv .cargo/config.toml .cargo/config.toml.bak
+install_cargo_tool() {
+  local binary="$1"
+  local crate="$2"
+  local version_file="$3"
+  local version_override="${4:-}"
+  local expected="$version_override"
 
-# Ensure the original file is restored on exit or error
-trap 'mv .cargo/config.toml.bak .cargo/config.toml' EXIT
+  if [[ -z "$expected" ]]; then
+    expected="$(read_version_file "$version_file")"
+  fi
+
+  if [[ -z "$expected" ]]; then
+    die "$(basename "$version_file") is required to pin ${crate}"
+  fi
+
+  local installed=""
+  if command -v "$binary" >/dev/null 2>&1; then
+    installed="$("$binary" --version 2>/dev/null | awk '{print $2}')"
+  fi
+
+  if [[ "$installed" == "$expected" ]]; then
+    return
+  fi
+
+  cargo install --locked --version "$expected" "$crate"
+
+  installed="$("$binary" --version 2>/dev/null | awk '{print $2}')"
+  if [[ "$installed" != "$expected" ]]; then
+    die "${crate} version mismatch (expected ${expected}, found ${installed:-unknown})"
+  fi
+}
+
+config="$DIR/.cargo/config.toml"
+backup="$DIR/.cargo/config.toml.bak"
+
+if [[ ! -f "$config" ]]; then
+  die "missing .cargo/config.toml"
+fi
+
+if [[ -f "$backup" ]]; then
+  die "refusing to overwrite existing backup: $backup"
+fi
+
+restore_config() {
+  if [[ -f "$backup" ]]; then
+    mv "$backup" "$config"
+  fi
+}
+
+tmp_vendor=""
+cleanup() {
+  if [[ -n "$tmp_vendor" && -d "$tmp_vendor" ]]; then
+    rm -rf "$tmp_vendor"
+  fi
+  restore_config
+}
+
+# Temporarily move the offline Cargo config aside so the update path can reach
+# crates.io. This is the only script that should do this.
+mv "$config" "$backup"
+trap cleanup EXIT
 
 cargo update
-cargo vendor --locked "$VENDOR_DIR"
-
-# Run security audit while online (advisory DB update requires network).
-cargo_audit_version="${CARGO_AUDIT_VERSION:-}"
-if [[ -z "$cargo_audit_version" && -f "$DIR/.cargo-audit-version" ]]; then
-  cargo_audit_version=$(head -n1 "$DIR/.cargo-audit-version" | tr -d '[:space:]')
+if [[ -z "$VENDOR_DIR" || "$VENDOR_DIR" == "/" ]]; then
+  die "invalid vendor directory: ${VENDOR_DIR:-unset}"
 fi
+tmp_vendor="$(mktemp -d "${TMPDIR:-/tmp}/rust-template-vendor.XXXXXX")"
+cargo vendor --locked --versioned-dirs "$tmp_vendor"
+rm -rf "$VENDOR_DIR"
+mkdir -p "$VENDOR_DIR"
+mv "$tmp_vendor"/* "$VENDOR_DIR"/
+rmdir "$tmp_vendor"
+tmp_vendor=""
 
-if ! command -v cargo-audit >/dev/null 2>&1; then
-  if [[ -n "$cargo_audit_version" ]]; then
-    cargo install --locked --version "$cargo_audit_version" cargo-audit
-  else
-    cargo install --locked cargo-audit
-  fi
-fi
+# Run security checks while online. Advisory DB updates require network.
+install_cargo_tool cargo-audit cargo-audit "$DIR/.cargo-audit-version" "${CARGO_AUDIT_VERSION:-}"
+install_cargo_tool cargo-deny cargo-deny "$DIR/.cargo-deny-version" "${CARGO_DENY_VERSION:-}"
 
 cargo audit
+cargo deny check
 
 # Restore config before verifying offline build.
 trap - EXIT
-mv .cargo/config.toml.bak .cargo/config.toml
+cleanup
 
 # Verify the updated lockfile + vendor cache work offline.
 cargo check --frozen
+script/test
+script/lint

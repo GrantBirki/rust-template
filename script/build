@@ -1,6 +1,6 @@
 #! /usr/bin/env bash
 
-set -e
+set -euo pipefail
 
 source script/env "$@"
 
@@ -140,20 +140,21 @@ while [[ $# -gt 0 ]]; do
   shift
 done
 
-package_name=$(first_match '^[[:space:]]*name[[:space:]]*=' "$DIR/Cargo.toml" \
-  | sed -E 's/.*=[[:space:]]*"([^"]+)".*/\1/' \
-  | head -n1)
+package_line="$(first_match '^[[:space:]]*name[[:space:]]*=' "$DIR/Cargo.toml" || true)"
+package_name=""
+if [[ "$package_line" =~ =[[:space:]]*\"([^\"]+)\" ]]; then
+  package_name="${BASH_REMATCH[1]}"
+fi
 
 if [[ -z "$package_name" ]]; then
   package_name="$REPO_NAME"
 fi
 
-metadata=$(cargo metadata --no-deps --format-version 1 2>/dev/null || true)
+metadata=$(cargo metadata --frozen --no-deps --format-version 1 2>/dev/null || true)
 target_dir=""
 if [[ -n "$metadata" ]]; then
   target_dir=$(printf '%s' "$metadata" \
-    | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p' \
-    | head -n1)
+    | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p; q')
 fi
 
 if [[ -z "$target_dir" ]]; then
@@ -174,7 +175,7 @@ if [[ "$release_mode" != "true" ]]; then
   if [[ -f "$candidate" ]]; then
     binary_path="$candidate"
   else
-    fallback=$(find "$target_dir/release" -maxdepth 1 -type f -perm -111 2>/dev/null | head -n1)
+    fallback=$(find "$target_dir/release" -maxdepth 1 -type f -perm -111 -print -quit 2>/dev/null)
     if [[ -n "$fallback" ]]; then
       binary_path="$fallback"
     fi
@@ -190,7 +191,10 @@ if [[ "$release_mode" != "true" ]]; then
   exit 0
 fi
 
-host_target=$(rustc -vV | awk -F': ' '/^host: /{print $2; exit}')
+host_target=$(rustc -vV | awk -F': ' '/^host: /{print $2}')
+if [[ -z "$host_target" ]]; then
+  die "could not determine rust host target"
+fi
 
 if [[ ${#targets[@]} -eq 0 && -n "${BUILD_TARGETS:-}" ]]; then
   IFS=',' read -r -a targets <<< "$BUILD_TARGETS"
@@ -210,6 +214,8 @@ fi
 if [[ -z "$build_version" ]]; then
   build_version="dev"
 fi
+build_version="${build_version//\//-}"
+build_version="${build_version// /-}"
 
 build_commit=$(git rev-parse --short HEAD 2>/dev/null || true)
 if [[ -z "$build_commit" ]]; then
@@ -240,7 +246,7 @@ for target in "${targets[@]}"; do
     if command -v rustup >/dev/null 2>&1; then
       if ! rustup target list --installed | grep -qx "$target"; then
         echo -e "${RED}error:${OFF} rust target not installed: ${target}" >&2
-        echo -e "${RED}hint:${OFF} install the target while online, then re-run the build" >&2
+        echo -e "${RED}hint:${OFF} provision the target before egress-blocked builds, then re-run the build" >&2
         exit 1
       fi
     else
@@ -252,15 +258,17 @@ for target in "${targets[@]}"; do
   if [[ "$target" != "$host_target" ]]; then
     require_cmd cargo-zigbuild
     require_cmd zig
-    assert_tool_version "zig" "$DIR/.zig-version" "$(zig version | head -n1)"
+    assert_tool_version "zig" "$DIR/.zig-version" "$(zig version)"
     if [[ -f "$DIR/.cargo-zigbuild-version" ]]; then
       expected=$(head -n1 "$DIR/.cargo-zigbuild-version" | tr -d '[:space:]')
-      installed=$(cargo-zigbuild --version 2>/dev/null | awk '{print $2}')
+      installed_output=$(cargo-zigbuild --version 2>/dev/null || true)
+      installed="${installed_output#cargo-zigbuild }"
+      installed="${installed%% *}"
       if [[ -n "$installed" && "$installed" != "$expected" ]]; then
-        warn "cargo-zigbuild version mismatch (expected ${expected}, found ${installed})"
+        die "cargo-zigbuild version mismatch (expected ${expected}, found ${installed})"
       fi
       if [[ -z "$installed" ]]; then
-        warn "could not determine cargo-zigbuild version"
+        die "could not determine cargo-zigbuild version"
       fi
     fi
     build_cmd=(cargo zigbuild)

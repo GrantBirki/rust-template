@@ -1,6 +1,6 @@
 #! /usr/bin/env bash
 
-set -e # prevent any kind of script failures
+set -euo pipefail
 
 # COLORS
 export OFF='\033[0m'
@@ -31,7 +31,7 @@ export TARBALL_DIR
 
 # set the rust version to the one specified from the rustc --version command
 if command -v rustc >/dev/null 2>&1; then
-  RUST_VERSION=$(rustc --version | cut -d ' ' -f2)
+  RUST_VERSION=$(rustc --version | awk '{print $2}')
 else
   RUST_VERSION="missing"
 fi

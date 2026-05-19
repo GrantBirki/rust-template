@@ -21,9 +21,3 @@ updates:
     time: '21:00'
   cooldown:
     default-days: 45
-- package-ecosystem: cargo
-  directory: "/"
-  schedule:
-    interval: monthly
-  cooldown:
-    default-days: 45

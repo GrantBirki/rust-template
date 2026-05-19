@@ -1,16 +1,17 @@
 #! /usr/bin/env bash
 
-set -e
+set -euo pipefail
 
 source script/env "$@"
 
-if [[ "$1" != "--A" && "$1" != "-A" && "$1" != "-a" && "$1" != "--a" && "$1" != "--auto-fix" ]]; then
-  FMT_FLAGS="-- --check"
-else
-  FMT_FLAGS=""
-fi
+FMT_FLAGS=(-- --check)
+case "${1:-}" in
+  --A|-A|-a|--a|--auto-fix)
+    FMT_FLAGS=()
+    ;;
+esac
 
-cargo fmt --all $FMT_FLAGS
-cargo clippy --locked --all-targets --all-features -- -D warnings
+cargo fmt --all "${FMT_FLAGS[@]}"
+cargo clippy --frozen --all-targets --all-features -- -D warnings
 cargo verify-project
-cargo doc --locked --no-deps --document-private-items --all-features --workspace
+cargo doc --frozen --no-deps --document-private-items --all-features --workspace

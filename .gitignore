@@ -12,3 +12,6 @@ dist/
 coverage/
 
 .cargo/config.toml.bak
+
+vendor/release-tools/cargo-zigbuild/source/*/target/
+vendor/release-tools/.tmp/
