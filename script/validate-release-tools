@@ -311,12 +311,15 @@ require_pattern() {
   fi
 }
 
-for workflow in "$DIR/.github/workflows/build.yml" "$DIR/.github/workflows/release.yml"; do
-  if grep -nE '\bcurl\b|cargo install[[:space:]].*--version|rustup target add|setup-rust-toolchain|script/prepare-rust' "$workflow"; then
-    die "${workflow#$DIR/} contains networked release-tool installation commands"
-  fi
-done
+if grep -nE '\bcurl\b|cargo install[[:space:]].*--version|rustup target add|setup-rust-toolchain' "$DIR/.github/workflows/build.yml"; then
+  die ".github/workflows/build.yml contains networked release-tool installation commands"
+fi
 
+if grep -nE '\bcurl\b|cargo install[[:space:]].*--version|rustup target add|setup-rust-toolchain|script/prepare-rust' "$DIR/.github/workflows/release.yml"; then
+  die ".github/workflows/release.yml contains networked release-tool installation commands"
+fi
+
+require_pattern "$DIR/.github/workflows/build.yml" 'script/prepare-rust' "build workflow must prepare the pinned Rust toolchain explicitly before offline release smoke validation"
 require_pattern "$DIR/.github/workflows/build.yml" 'script/install-zig' "build workflow must exercise vendored release-tool installation"
 require_pattern "$DIR/.github/workflows/build.yml" 'script/verify-release-toolchain' "build workflow must verify the release toolchain"
 require_pattern "$DIR/.github/workflows/build.yml" 'script/build --release' "build workflow must run release-mode packaging"
