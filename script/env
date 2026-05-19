@@ -22,6 +22,14 @@ export RUST_ENV
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && cd .. && pwd )"
 export DIR
 
+if [[ "${CI:-}" != "true" ]]; then
+  LOCAL_TMP_DIR="$DIR/target/tmp"
+  mkdir -p "$LOCAL_TMP_DIR"
+  : "${RUNNER_TEMP:=$LOCAL_TMP_DIR}"
+  : "${TMPDIR:=$LOCAL_TMP_DIR}"
+  export RUNNER_TEMP TMPDIR
+fi
+
 # The name of the repository is the name of the directory (usually)
 REPO_NAME=$(basename "$PWD")
 export REPO_NAME

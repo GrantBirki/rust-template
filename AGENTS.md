@@ -11,6 +11,7 @@ The template is meant to be copied into services, CLIs, and libraries that must 
 - Vendored dependencies: Cargo resolves from `vendor/cache` through `.cargo/config.toml`.
 - Script-first workflow: use `script/*` entrypoints instead of ad hoc command sequences.
 - Public-safe maintenance: do not add private paths, secrets, organization context, or machine-specific assumptions to tracked files.
+- Repo-scoped local artifacts: keep disposable build, install, and tool extraction outputs under the working tree when practical.
 - Durable documentation: if behavior changes, update `README.md`, `AGENTS.md`, and any relevant docs in the same change.
 
 ## Public Repository Hygiene
@@ -32,6 +33,7 @@ The template is meant to be copied into services, CLIs, and libraries that must 
 - All direct Cargo dependencies in `Cargo.toml` must use exact versions such as `=1.2.3`.
 - `Cargo.lock` is committed and treated as source of truth.
 - Vendored crates live in `vendor/cache` and are required for offline builds.
+- Local non-CI scripts should prefer ignored repo-local temp roots such as `target/tmp` for Rust, Zig, Cargo, and release-tool scratch artifacts. Respect caller-provided `TMPDIR` and `RUNNER_TEMP`.
 - `rust-toolchain.toml`, `.rust-version`, `Cargo.toml` `rust-version`, `.zig-version`, `.cargo-zigbuild-version`, and `vendor/release-tools/manifest.toml` must stay consistent with actual supported tools.
 - GitHub Actions must be pinned to full commit SHAs.
 - Checkout steps should use `persist-credentials: false` unless a job explicitly needs credentials persisted.
@@ -49,6 +51,17 @@ Do not describe GitHub-hosted runners as fully air-gapped. They can validate off
 
 The remaining blocker for fully egress-blocked release builds is Rust itself: this repo does not yet vendor the Rust toolchain or target standard libraries.
 
+## Local Artifact Placement
+
+Keep transient tool outputs close to the repo when reasonable.
+
+- Outside CI, `script/env` defaults `RUNNER_TEMP` and `TMPDIR` to `target/tmp` when the caller has not already set them.
+- Use ignored directories under `target/` for disposable Rust, Zig, Cargo, archive extraction, and release-tool build artifacts.
+- Do not hard-code absolute machine-specific temp paths in scripts, docs, workflows, or examples.
+- Do not commit generated temp files, extracted tool directories, build-script executables, or local cache contents.
+- Preserve explicit caller or CI temp roots. GitHub Actions jobs should continue using the runner-provided environment where appropriate.
+- If a future script needs a scratch directory, derive it from `TMPDIR`, `RUNNER_TEMP`, `target/`, or another ignored repo-local path instead of choosing an OS-global location by default.
+
 ## Script Contracts
 
 All scripts live in `script/` and should use `set -euo pipefail` unless there is a documented reason not to.
@@ -56,6 +69,7 @@ All scripts live in `script/` and should use `set -euo pipefail` unless there is
 - `script/env`
   - Shared environment and helper functions.
   - Exports offline Cargo/rustup defaults.
+  - Outside CI, defaults `RUNNER_TEMP` and `TMPDIR` to `target/tmp` unless the caller already set them.
   - Defines `DIR`, `VENDOR_DIR`, toolchain checks, vendor checks, and common `die`/`warn` helpers.
   - Do not add network behavior here.
 
