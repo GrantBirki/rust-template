@@ -217,6 +217,13 @@ fi
 build_version="${build_version//\//-}"
 build_version="${build_version// /-}"
 
+if [[ "$build_version" == "ci" && -z "${SOURCE_DATE_EPOCH:-}" ]]; then
+  source_date_epoch="$(git log -1 --format=%ct HEAD 2>/dev/null || true)"
+  if [[ -n "$source_date_epoch" ]]; then
+    export SOURCE_DATE_EPOCH="$source_date_epoch"
+  fi
+fi
+
 build_commit=$(git rev-parse --short HEAD 2>/dev/null || true)
 if [[ -z "$build_commit" ]]; then
   build_commit="unknown"

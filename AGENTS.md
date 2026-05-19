@@ -105,12 +105,12 @@ All scripts live in `script/` and should use `set -euo pipefail` unless there is
 - `script/vendor-release-tools`
   - Online-only release-tool refresh path.
   - Fetches pinned Zig host archives and the pinned `cargo-zigbuild` crate.
-  - Generates/preserves the `cargo-zigbuild` lockfile, vendors its transitive crates, writes deterministic source/vendor `.tar.gz` archives, and writes `vendor/release-tools/manifest.toml`.
+  - Generates/preserves the `cargo-zigbuild` lockfile, commits a standalone reviewable lockfile copy, vendors its transitive crates, writes deterministic source/vendor `.tar.gz` archives, and writes `vendor/release-tools/manifest.toml`.
   - Must be run intentionally and reviewed like any other supply-chain update.
 
 - `script/validate-release-tools`
   - Offline validation for committed release-tool artifacts.
-  - Verifies manifest version consistency, artifact existence, SHA-256 checksums, archive path safety, `cargo-zigbuild` source/lock/vendor archive state, and release workflow/install-script network guardrails.
+  - Verifies manifest version consistency, artifact existence, SHA-256 checksums, archive path safety, standalone lockfile consistency, `cargo-zigbuild` source/lock/vendor archive state, and release workflow/install-script network guardrails.
 
 - `script/verify-release-toolchain`
   - Offline verification for release builders.

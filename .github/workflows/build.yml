@@ -19,16 +19,13 @@ jobs:
         os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     env:
-      BUILD_VERSION: pr-smoke
+      BUILD_VERSION: ci
 
     steps:
       - name: checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # pin@v6.0.2
         with:
           persist-credentials: false
-
-      - name: set reproducible timestamp
-        run: echo "SOURCE_DATE_EPOCH=$(git log -1 --format=%ct HEAD)" >> "$GITHUB_ENV"
 
       - name: install release tools
         run: script/install-zig
@@ -39,5 +36,5 @@ jobs:
       - name: bootstrap
         run: script/bootstrap
 
-      - name: build release smoke
+      - name: build
         run: script/build --release

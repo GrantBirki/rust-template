@@ -110,7 +110,7 @@ Release-tool updates are separate from application dependency updates:
 script/vendor-release-tools
 ```
 
-This refreshes committed Zig tarballs, the `cargo-zigbuild` crate, deterministic `cargo-zigbuild` source/vendor archives, and `vendor/release-tools/manifest.toml`. Review release-tool updates by checking version pins, upstream URLs, checksums, manifest changes, and the vendoring scripts rather than treating GitHub's expanded archive diff as first-party code. Do not mix release-tool vendoring with normal application dependency updates.
+This refreshes committed Zig tarballs, the `cargo-zigbuild` crate, deterministic `cargo-zigbuild` source/vendor archives, the standalone reviewable `cargo-zigbuild` lockfile, and `vendor/release-tools/manifest.toml`. Review release-tool updates by checking version pins, upstream URLs, checksums, manifest changes, lockfile changes, and the vendoring scripts rather than treating GitHub's expanded archive diff as first-party code. Do not mix release-tool vendoring with normal application dependency updates.
 
 ## Release Process
 

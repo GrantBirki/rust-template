@@ -20,6 +20,14 @@ sha256_file() {
   fi
 }
 
+sha256_stdin() {
+  if command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 | awk '{print $1}'
+  else
+    sha256sum | awk '{print $1}'
+  fi
+}
+
 validate_tar_entries() {
   local archive="$1"
   local compression_flag="$2"
@@ -128,8 +136,10 @@ cargo_vendor_archive_path="$(manifest_value "vendor_archive_path")"
 cargo_vendor_archive_sha256="$(manifest_value "vendor_archive_sha256")"
 cargo_vendor_archive_root="$(manifest_value "vendor_archive_root")"
 cargo_vendor_dir="$(manifest_value "vendor_dir")"
+cargo_lockfile_path="$(manifest_value "lockfile_path")"
+cargo_lockfile_sha256="$(manifest_value "lockfile_sha256")"
 
-if [[ -z "$cargo_crate_path" || -z "$cargo_crate_sha256" || -z "$cargo_source_archive_path" || -z "$cargo_source_archive_sha256" || -z "$cargo_source_archive_root" || -z "$cargo_vendor_archive_path" || -z "$cargo_vendor_archive_sha256" || -z "$cargo_vendor_archive_root" || -z "$cargo_vendor_dir" ]]; then
+if [[ -z "$cargo_crate_path" || -z "$cargo_crate_sha256" || -z "$cargo_source_archive_path" || -z "$cargo_source_archive_sha256" || -z "$cargo_source_archive_root" || -z "$cargo_vendor_archive_path" || -z "$cargo_vendor_archive_sha256" || -z "$cargo_vendor_archive_root" || -z "$cargo_vendor_dir" || -z "$cargo_lockfile_path" || -z "$cargo_lockfile_sha256" ]]; then
   die "manifest is missing cargo-zigbuild fields"
 fi
 
@@ -145,6 +155,7 @@ fi
 
 cargo_source_archive="$DIR/$cargo_source_archive_path"
 cargo_vendor_archive="$DIR/$cargo_vendor_archive_path"
+cargo_lockfile="$DIR/$cargo_lockfile_path"
 
 if [[ ! -f "$cargo_source_archive" ]]; then
   die "missing cargo-zigbuild source archive: $cargo_source_archive_path"
@@ -152,6 +163,10 @@ fi
 
 if [[ ! -f "$cargo_vendor_archive" ]]; then
   die "missing cargo-zigbuild vendor archive: $cargo_vendor_archive_path"
+fi
+
+if [[ ! -f "$cargo_lockfile" ]]; then
+  die "missing cargo-zigbuild standalone lockfile: $cargo_lockfile_path"
 fi
 
 actual_source_archive_sha256="$(sha256_file "$cargo_source_archive")"
@@ -164,6 +179,11 @@ if [[ "$actual_vendor_archive_sha256" != "$cargo_vendor_archive_sha256" ]]; then
   die "cargo-zigbuild vendor archive checksum mismatch"
 fi
 
+actual_lockfile_sha256="$(sha256_file "$cargo_lockfile")"
+if [[ "$actual_lockfile_sha256" != "$cargo_lockfile_sha256" ]]; then
+  die "cargo-zigbuild lockfile checksum mismatch"
+fi
+
 validate_tar_entries "$cargo_source_archive" z
 validate_tar_entries "$cargo_vendor_archive" z
 
@@ -173,6 +193,11 @@ fi
 
 if ! archive_contains "$cargo_source_archive" z "${cargo_source_archive_root}/Cargo.lock"; then
   die "cargo-zigbuild source archive missing Cargo.lock"
+fi
+
+archive_lockfile_sha256="$(tar -xOzf "$cargo_source_archive" "${cargo_source_archive_root}/Cargo.lock" | sha256_stdin)"
+if [[ "$archive_lockfile_sha256" != "$actual_lockfile_sha256" ]]; then
+  die "cargo-zigbuild standalone lockfile does not match source archive Cargo.lock"
 fi
 
 if [[ "$cargo_vendor_dir" != "${cargo_vendor_archive_root}/"* ]]; then

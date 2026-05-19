@@ -54,3 +54,5 @@ vendor_archive_path = "vendor/release-tools/cargo-zigbuild/cargo-zigbuild-0.20.1
 vendor_archive_sha256 = "bf1db6aa94fa4ddc4095b1d4c112feadf34a9baccfe0edeac35ac603d8dcf378"
 vendor_archive_root = "cargo-zigbuild-0.20.1-vendor"
 vendor_dir = "cargo-zigbuild-0.20.1-vendor/cache"
+lockfile_path = "vendor/release-tools/cargo-zigbuild/cargo-zigbuild-0.20.1.Cargo.lock"
+lockfile_sha256 = "90cb800c31ca9a6f0710203b8d0dbc326f525f147bc15a1c68fc3267a0e6ccf8"
