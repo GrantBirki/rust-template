@@ -21,7 +21,8 @@ Some security controls cannot be fully represented in tracked files. Configure t
 - Require approval for first-time contributor workflows.
 - Keep GitHub Actions pinned to full commit SHAs.
 - Do not allow untrusted pull request workflows to receive write tokens.
-- Build, test, lint, and release-build jobs should not download third-party tools after checkout/action loading.
+- Test, lint, and PR build jobs may run the explicit `script/prepare-rust` preflight, then should stay on the normal offline script surface.
+- Build and release-build jobs should not download third-party tools after checkout/action loading.
 - Keep the `build` workflow as the PR-based release smoke test: install vendored release tools, verify them, then run release-mode packaging.
 - If an egress-blocking action is added, apply it to build/test/package jobs after checkout and before scripts run. Do not apply it to release publishing, signing, or verification jobs unless those jobs are split into an explicitly GitHub-network-allowed phase.
 
@@ -48,7 +49,7 @@ Require CODEOWNER review for sensitive paths:
 - Require reviewer approval before jobs using that environment can publish release assets.
 - Keep release publication permissions limited to the release job.
 - Verify release assets after publication by re-downloading them, checking `checksums.txt`, and verifying artifact attestations.
-- Release build jobs should install Zig and `cargo-zigbuild` from `vendor/release-tools`; they should not run `curl`, `cargo install --version`, `rustup target add`, or Rust toolchain setup actions.
+- Release build jobs should install Zig and `cargo-zigbuild` from `vendor/release-tools`; they should not run `script/prepare-rust`, `curl`, `cargo install --version`, `rustup target add`, or Rust toolchain setup actions.
 
 ## Dependabot
 

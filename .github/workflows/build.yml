@@ -27,6 +27,9 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: prepare rust
+        run: script/prepare-rust
+
       - name: install release tools
         run: script/install-zig
 

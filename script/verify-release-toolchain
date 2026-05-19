@@ -4,12 +4,10 @@ set -euo pipefail
 
 source script/env "$@"
 
-require_cmd rustc
+ensure_rust_toolchain
 require_cmd cargo
 require_cmd zig
 require_cmd cargo-zigbuild
-
-ensure_rust_toolchain
 
 expected_zig="$(read_version_file "$DIR/.zig-version")"
 if [[ -z "$expected_zig" ]]; then

@@ -4,12 +4,11 @@ set -euo pipefail
 
 source script/env "$@"
 
-require_cmd rustc
+ensure_rust_toolchain
 require_cmd cargo
 
 echo -e "Rust version: ${GREEN}${RUST_VERSION}${OFF}"
 
-ensure_rust_toolchain
 ensure_vendor_cache
 
 # This validates that the deps are available so the project can be built offline.

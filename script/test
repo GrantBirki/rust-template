@@ -4,6 +4,8 @@ set -euo pipefail
 
 source script/env "$@"
 
+ensure_rust_toolchain
+
 script/validate-release-tools
 
 # unless the --coverage or -c or --cov flag is passed, skip coverage and only run `cargo test`

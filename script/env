@@ -9,9 +9,10 @@ export GREEN='\033[0;32m'
 export BLUE='\033[0;34m'
 export PURPLE='\033[0;35m'
 
-# Default to air-gapped cargo/rustup behavior.
+# Default to air-gapped Cargo behavior and prevent rustup proxies from
+# hydrating missing toolchains behind an offline script's back.
 export CARGO_NET_OFFLINE=true
-export RUSTUP_OFFLINE=1
+export RUSTUP_AUTO_INSTALL=0
 
 # set RUST_ENV to development (as a default) if not set
 : "${RUST_ENV:=development}"
@@ -37,13 +38,23 @@ export REPO_NAME
 TARBALL_DIR="$DIR/tarballs"
 export TARBALL_DIR
 
-# set the rust version to the one specified from the rustc --version command
-if command -v rustc >/dev/null 2>&1; then
-  RUST_VERSION=$(rustc --version | awk '{print $2}')
-else
-  RUST_VERSION="missing"
-fi
-export RUST_VERSION
+refresh_rust_version() {
+  local rust_version_out=""
+
+  if command -v rustc >/dev/null 2>&1; then
+    if rust_version_out="$(rustc --version 2>/dev/null)"; then
+      RUST_VERSION="$(awk '{print $2}' <<<"$rust_version_out")"
+    else
+      RUST_VERSION="missing"
+    fi
+  else
+    RUST_VERSION="missing"
+  fi
+
+  export RUST_VERSION
+}
+
+refresh_rust_version
 
 # detect OS version and architecture
 if [[ "$OSTYPE" == "linux-gnu"* ]]; then
@@ -99,10 +110,16 @@ rust_toolchain_version() {
 ensure_rust_toolchain() {
   local expected
   expected="$(rust_toolchain_version)"
-  if [[ -n "$expected" && "$RUST_VERSION" != "$expected" ]]; then
-    die "rust toolchain mismatch (expected ${expected}, found ${RUST_VERSION})"
+  if [[ -z "$expected" ]]; then
+    die "missing channel in rust-toolchain.toml"
   fi
-  if [[ -f "$DIR/.rust-version" && -n "$expected" ]]; then
+  if [[ "$RUST_VERSION" == "missing" ]]; then
+    die "rust toolchain is missing or unavailable (expected ${expected}). Repo scripts do not hydrate Rust implicitly; run script/prepare-rust while online, then rerun this command."
+  fi
+  if [[ "$RUST_VERSION" != "$expected" ]]; then
+    die "rust toolchain mismatch (expected ${expected}, found ${RUST_VERSION}). Repo scripts do not switch Rust implicitly; run script/prepare-rust while online or provision the pinned toolchain before rerunning."
+  fi
+  if [[ -f "$DIR/.rust-version" ]]; then
     local file_version
     file_version="$(read_version_file "$DIR/.rust-version")"
     if [[ -n "$file_version" && "$file_version" != "$expected" ]]; then

@@ -24,26 +24,27 @@ A starter template for Rust projects.
 ## Getting Started
 
 1. Clone the repository
-2. Run `script/bootstrap`
-3. Run `script/test` to run the tests
-4. Run `script/lint` to run the linter
-5. Run `script/build` to build the project
-6. Run `script/server` to run the app (or CLI)
-7. Bump `version` in `Cargo.toml` and merge to `main` to trigger a release (CI creates the tag)
+2. Run `script/prepare-rust` while online to install the pinned Rust toolchain explicitly
+3. Run `script/bootstrap`
+4. Run `script/test` to run the tests
+5. Run `script/lint` to run the linter
+6. Run `script/build` to build the project
+7. Run `script/server` to run the app (or CLI)
+8. Bump `version` in `Cargo.toml` and merge to `main` to trigger a release (CI creates the tag)
 
 ## Hermeticity Model
 
-The daily workflow is offline by default. `script/bootstrap`, `script/test`, `script/lint`, `script/build`, and `script/server` use vendored Cargo sources and frozen/offline Cargo behavior.
+The normal project workflow is explicit Rust preparation followed by offline project scripts. Run `script/prepare-rust` while online when the pinned Rust toolchain needs to be installed, then use `script/bootstrap`, `script/test`, `script/lint`, `script/build`, and `script/server` with vendored Cargo sources and frozen/offline Cargo behavior.
 
 Outside CI, shared script setup defaults `RUNNER_TEMP` and `TMPDIR` to the ignored repo-local `target/tmp` directory when the caller has not already set them, so disposable Rust, Zig, Cargo, and release-tool scratch artifacts stay near the working tree.
 
-GitHub-hosted lint/test/build jobs validate offline Cargo behavior, but hosted runners are not fully air-gapped infrastructure. Checkout, action loading, artifact upload, release publication, and attestation verification still use GitHub platform services.
+GitHub-hosted `lint`, `test`, and PR `build` jobs use the same prepare-then-offline model: they run `script/prepare-rust` first, then enter the normal offline script surface. Hosted runners are not fully air-gapped infrastructure. Checkout, action loading, artifact upload, release publication, and attestation verification still use GitHub platform services.
 
 Release build jobs install Zig and `cargo-zigbuild` from committed artifacts under `vendor/release-tools`. Zig is kept as upstream `.tar.xz` archives. `cargo-zigbuild` source and vendored dependencies are kept as deterministic `.tar.gz` archives that CI verifies and expands under `${RUNNER_TEMP}`. Those artifacts are refreshed only by `script/vendor-release-tools`, which is intentionally online-only. Upstream release-tool URLs and checksums are locked in `release-tools.lock.toml`; the generated committed-artifact inventory lives in `vendor/release-tools/manifest.toml`.
 
-This first pass does not vendor the Rust toolchain or Rust target standard libraries. Hosted runners may still hydrate the pinned Rust toolchain if it is missing; fully egress-blocked build jobs require Rust and any required target standard libraries to already be present or vendored in a future pass.
+This first pass does not vendor the Rust toolchain or Rust target standard libraries. The protected `release` workflow does not run `script/prepare-rust`; it requires Rust and any required target standard libraries to already be present or vendored in a future pass.
 
-The `build` workflow is the PR-based release smoke test. It installs the vendored release tools, verifies them, then runs `script/build --release` so PRs exercise most of the release build path before a merge to `main` can publish a release. This intentionally trades CI time for fewer release-time network and supply-chain dependencies; the primary cost is compiling `cargo-zigbuild` from committed, archived source on each runner.
+The `build` workflow is the PR-based release smoke test. It explicitly prepares the pinned Rust toolchain, installs the vendored release tools, verifies them, then runs `script/build --release` so PRs exercise most of the release build path before a merge to `main` can publish a release. This intentionally trades CI time for fewer release-time network and supply-chain dependencies; the primary cost is compiling `cargo-zigbuild` from committed, archived source on each runner.
 
 ## CLI Usage (Example)
 

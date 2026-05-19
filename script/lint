@@ -4,6 +4,8 @@ set -euo pipefail
 
 source script/env "$@"
 
+ensure_rust_toolchain
+
 FMT_FLAGS=(-- --check)
 case "${1:-}" in
   --A|-A|-a|--a|--auto-fix)

@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+source script/env "$@"
+
+expected="$(rust_toolchain_version)"
+if [[ -z "$expected" ]]; then
+  die "missing channel in rust-toolchain.toml"
+fi
+
+require_cmd rustup
+
+# This script is the intentional online Rust preparation path.
+unset CARGO_NET_OFFLINE
+
+echo -e "${BLUE}Preparing Rust toolchain:${OFF} ${PURPLE}${expected}${OFF}"
+rustup toolchain install "$expected" \
+  --profile minimal \
+  --component rustfmt \
+  --component clippy
+
+refresh_rust_version
+ensure_rust_toolchain
+
+echo -e "${GREEN}Rust toolchain ready:${OFF} ${RUST_VERSION}"
