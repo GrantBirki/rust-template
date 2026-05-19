@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+source script/env "$@"
+
+require_cmd rustc
+require_cmd cargo
+require_cmd zig
+require_cmd cargo-zigbuild
+
+ensure_rust_toolchain
+
+expected_zig="$(read_version_file "$DIR/.zig-version")"
+if [[ -z "$expected_zig" ]]; then
+  die ".zig-version is required"
+fi
+
+actual_zig="$(zig version)"
+if [[ "$actual_zig" != "$expected_zig" ]]; then
+  die "zig version mismatch (expected ${expected_zig}, found ${actual_zig})"
+fi
+
+expected_zigbuild="$(read_version_file "$DIR/.cargo-zigbuild-version")"
+if [[ -z "$expected_zigbuild" ]]; then
+  die ".cargo-zigbuild-version is required"
+fi
+
+actual_zigbuild_output="$(cargo-zigbuild --version 2>/dev/null || true)"
+actual_zigbuild="${actual_zigbuild_output#cargo-zigbuild }"
+actual_zigbuild="${actual_zigbuild%% *}"
+if [[ "$actual_zigbuild" != "$expected_zigbuild" ]]; then
+  die "cargo-zigbuild version mismatch (expected ${expected_zigbuild}, found ${actual_zigbuild:-unknown})"
+fi
+
+if [[ -n "${VERIFY_RUST_TARGETS:-}" ]]; then
+  require_cmd rustup
+  IFS=',' read -r -a targets <<< "$VERIFY_RUST_TARGETS"
+  for target in "${targets[@]}"; do
+    if [[ -n "$target" ]] && ! rustup target list --installed | grep -qx "$target"; then
+      die "rust target not installed: $target"
+    fi
+  done
+fi
+
+echo -e "${GREEN}release toolchain verified${OFF}"

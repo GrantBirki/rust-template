@@ -1,6 +1,6 @@
 #! /usr/bin/env bash
 
-set -e # prevent any kind of script failures
+set -euo pipefail
 
 source script/env "$@"
 

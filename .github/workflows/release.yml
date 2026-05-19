@@ -20,6 +20,7 @@ jobs:
       version: ${{ steps.version.outputs.version }}
       version_tag: ${{ steps.version.outputs.version_tag }}
       should_release: ${{ steps.version.outputs.should_release }}
+      source_date_epoch: ${{ steps.version.outputs.source_date_epoch }}
 
     steps:
       - name: checkout
@@ -40,6 +41,7 @@ jobs:
             exit 1
           fi
           version_tag="v${version}"
+          source_date_epoch="$(git log -1 --format=%ct HEAD)"
 
           should_release="false"
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
@@ -70,6 +72,7 @@ jobs:
           echo "version=${version}" >> "$GITHUB_OUTPUT"
           echo "version_tag=${version_tag}" >> "$GITHUB_OUTPUT"
           echo "should_release=${should_release}" >> "$GITHUB_OUTPUT"
+          echo "source_date_epoch=${source_date_epoch}" >> "$GITHUB_OUTPUT"
 
           if [[ "$should_release" != "true" ]]; then
             echo "No version bump detected; skipping release."
@@ -84,6 +87,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       BUILD_VERSION: ${{ needs.prepare.outputs.version_tag }}
+      SOURCE_DATE_EPOCH: ${{ needs.prepare.outputs.source_date_epoch }}
 
     steps:
       - name: checkout
@@ -92,12 +96,13 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - uses: actions-rust-lang/setup-rust-toolchain@150fca883cd4034361b621bd4e6a9d34e5143606 # pin@v1
-
-      - name: install zig + cargo-zigbuild
-        env:
-          RUSTUP_TARGETS: "aarch64-unknown-linux-gnu"
+      - name: install release tools
         run: script/install-zig
+
+      - name: verify release toolchain
+        env:
+          VERIFY_RUST_TARGETS: "aarch64-unknown-linux-gnu"
+        run: script/verify-release-toolchain
 
       - name: bootstrap
         run: script/bootstrap
@@ -121,6 +126,7 @@ jobs:
     runs-on: macos-latest
     env:
       BUILD_VERSION: ${{ needs.prepare.outputs.version_tag }}
+      SOURCE_DATE_EPOCH: ${{ needs.prepare.outputs.source_date_epoch }}
 
     steps:
       - name: checkout
@@ -129,12 +135,13 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - uses: actions-rust-lang/setup-rust-toolchain@150fca883cd4034361b621bd4e6a9d34e5143606 # pin@v1
-
-      - name: install zig + cargo-zigbuild
-        env:
-          RUSTUP_TARGETS: "x86_64-apple-darwin,aarch64-apple-darwin"
+      - name: install release tools
         run: script/install-zig
+
+      - name: verify release toolchain
+        env:
+          VERIFY_RUST_TARGETS: "x86_64-apple-darwin,aarch64-apple-darwin"
+        run: script/verify-release-toolchain
 
       - name: bootstrap
         run: script/bootstrap
@@ -155,10 +162,13 @@ jobs:
     needs: [prepare, build-linux, build-macos]
     permissions:
       contents: write
+    environment: release
     concurrency:
       group: release-${{ needs.prepare.outputs.version_tag }}
       cancel-in-progress: false
     runs-on: ubuntu-latest
+    env:
+      SOURCE_DATE_EPOCH: ${{ needs.prepare.outputs.source_date_epoch }}
     outputs:
       artifact-id: ${{ steps.upload-artifact.outputs.artifact-id }}
 
@@ -211,7 +221,15 @@ jobs:
                 cp -R "$docs_dir"/* "$stage_dir/" 2>/dev/null || true
               fi
               chmod +x "$stage_dir/$binary_name"
-              (cd "$stage_dir" && tar -czf "../../${base}.tar.gz" .)
+              (
+                cd "$stage_dir"
+                tar --sort=name \
+                  --mtime="@${SOURCE_DATE_EPOCH}" \
+                  --owner=0 \
+                  --group=0 \
+                  --numeric-owner \
+                  -czf "../../${base}.tar.gz" .
+              )
             fi
           done
           rm -rf "$staging"
@@ -219,9 +237,9 @@ jobs:
           (
             cd dist/merged
             if command -v shasum >/dev/null 2>&1; then
-              find . -maxdepth 1 -type f ! -name 'checksums.txt' -print0 | xargs -0 shasum -a 256 > checksums.txt
+              find . -maxdepth 1 -type f ! -name 'checksums.txt' -print0 | sort -z | xargs -0 shasum -a 256 > checksums.txt
             else
-              find . -maxdepth 1 -type f ! -name 'checksums.txt' -print0 | xargs -0 sha256sum > checksums.txt
+              find . -maxdepth 1 -type f ! -name 'checksums.txt' -print0 | sort -z | xargs -0 sha256sum > checksums.txt
             fi
           )
 
@@ -247,6 +265,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
         run: |
+          set -euo pipefail
           tag="${{ needs.prepare.outputs.version_tag }}"
           mapfile -d '' files < <(find dist/merged -maxdepth 1 -type f -print0)
           if [[ ${#files[@]} -eq 0 ]]; then
@@ -283,33 +302,36 @@ jobs:
           subject-path: "dist/"
 
   verify:
-    permissions: {}
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
-    needs: [release, sign]
+    needs: [prepare, release, sign]
     steps:
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # pin@8.0.1
-        with:
-          artifact-ids: ${{ needs.release.outputs.artifact-id }}
-          path: "dist/"
-
-      - name: verify
+      - name: verify published release assets
         env:
           OWNER: ${{ github.repository_owner }}
           REPO: ${{ github.event.repository.name }}
-          ARTIFACT_PATH: "dist/"
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "Scanning for files in $ARTIFACT_PATH"
+          set -euo pipefail
 
-          # Find all regular files in the artifact path recursively
-          find "$ARTIFACT_PATH" -type f | while read -r file; do
+          tag="${{ needs.prepare.outputs.version_tag }}"
+          rm -rf release-download
+          mkdir -p release-download
+          gh release download "$tag" --dir release-download
+
+          (
+            cd release-download
+            if command -v shasum >/dev/null 2>&1; then
+              shasum -a 256 -c checksums.txt
+            else
+              sha256sum -c checksums.txt
+            fi
+          )
+
+          find release-download -type f ! -name checksums.txt -print0 | while IFS= read -r -d '' file; do
             echo "Verifying file: $file"
-            
-            # Log the command that will be executed
-            echo "Executing command: gh attestation verify \"$file\" --repo ${OWNER}/${REPO} --signer-workflow ${OWNER}/${REPO}/.github/workflows/release.yml"
-            
-            # Run the command
-            gh attestation verify "$file" --repo ${OWNER}/${REPO} --signer-workflow ${OWNER}/${REPO}/.github/workflows/release.yml
+            gh attestation verify "$file" --repo "${OWNER}/${REPO}" --signer-workflow "${OWNER}/${REPO}/.github/workflows/release.yml"
           done
 
   release-summary:

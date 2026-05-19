@@ -62,7 +62,7 @@ impl CompletionShell {
     }
 }
 
-fn main() {
+fn main() -> io::Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
@@ -70,9 +70,11 @@ fn main() {
         Some(Commands::Sub { a, b }) => println!("{}", subtract(a, b)),
         Some(Commands::Version) => println!("{}", version_info().render()),
         Some(Commands::Completions { shell }) => print_completions(shell),
-        Some(Commands::Man) => print_man(),
+        Some(Commands::Man) => print_man()?,
         None => println!("{}", greet(&cli.name, cli.shout, cli.times)),
     }
+
+    Ok(())
 }
 
 fn print_completions(shell: CompletionShell) {
@@ -81,9 +83,8 @@ fn print_completions(shell: CompletionShell) {
     generate(shell.as_shell(), &mut cmd, name, &mut io::stdout());
 }
 
-fn print_man() {
+fn print_man() -> io::Result<()> {
     let cmd = Cli::command();
     let man = Man::new(cmd);
     man.render(&mut io::stdout())
-        .expect("failed to render man page");
 }

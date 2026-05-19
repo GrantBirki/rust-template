@@ -18,13 +18,23 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest]
     runs-on: ${{ matrix.os }}
+    env:
+      BUILD_VERSION: ci
 
     steps:
       - name: checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # pin@v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: install release tools
+        run: script/install-zig
+
+      - name: verify release toolchain
+        run: script/verify-release-toolchain
 
       - name: bootstrap
         run: script/bootstrap
 
       - name: build
-        run: script/build
+        run: script/build --release

@@ -16,6 +16,7 @@ pub fn greet(name: &str, shout: bool, times: u8) -> String {
         .join("\n")
 }
 
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct VersionInfo {
     pub name: &'static str,
     pub version: &'static str,
@@ -72,6 +73,11 @@ mod tests {
     }
 
     #[test]
+    fn greets_at_least_once() {
+        assert_eq!(greet("Codex", false, 0), "Hello, Codex!");
+    }
+
+    #[test]
     fn shouts_when_requested() {
         assert_eq!(greet("world", true, 1), "HELLO, WORLD!");
     }
@@ -81,5 +87,21 @@ mod tests {
         let info = version_info();
         assert_eq!(info.name, env!("CARGO_PKG_NAME"));
         assert_eq!(info.version, env!("CARGO_PKG_VERSION"));
+    }
+
+    #[test]
+    fn renders_version_metadata() {
+        let info = VersionInfo {
+            name: "example",
+            version: "1.2.3",
+            build_version: "v1.2.3",
+            commit: "abc1234",
+            build_date: "2026-05-19T00:00:00Z",
+        };
+
+        assert_eq!(
+            info.render(),
+            "example 1.2.3\nbuild: v1.2.3\ncommit: abc1234\nbuilt: 2026-05-19T00:00:00Z"
+        );
     }
 }

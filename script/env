@@ -1,6 +1,6 @@
 #! /usr/bin/env bash
 
-set -e # prevent any kind of script failures
+set -euo pipefail
 
 # COLORS
 export OFF='\033[0m'
@@ -22,6 +22,14 @@ export RUST_ENV
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && cd .. && pwd )"
 export DIR
 
+if [[ "${CI:-}" != "true" ]]; then
+  LOCAL_TMP_DIR="$DIR/target/tmp"
+  mkdir -p "$LOCAL_TMP_DIR"
+  : "${RUNNER_TEMP:=$LOCAL_TMP_DIR}"
+  : "${TMPDIR:=$LOCAL_TMP_DIR}"
+  export RUNNER_TEMP TMPDIR
+fi
+
 # The name of the repository is the name of the directory (usually)
 REPO_NAME=$(basename "$PWD")
 export REPO_NAME
@@ -31,7 +39,7 @@ export TARBALL_DIR
 
 # set the rust version to the one specified from the rustc --version command
 if command -v rustc >/dev/null 2>&1; then
-  RUST_VERSION=$(rustc --version | cut -d ' ' -f2)
+  RUST_VERSION=$(rustc --version | awk '{print $2}')
 else
   RUST_VERSION="missing"
 fi
