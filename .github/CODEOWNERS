@@ -10,6 +10,7 @@
 /Cargo.toml @GrantBirki
 /Cargo.lock @GrantBirki
 /deny.toml @GrantBirki
+/release-tools.lock.toml @GrantBirki
 /vendor/** @GrantBirki
 
 /rust-toolchain.toml @GrantBirki

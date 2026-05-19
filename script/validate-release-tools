@@ -6,6 +6,11 @@ source script/env "$@"
 
 release_tools_dir="$DIR/vendor/release-tools"
 manifest="$release_tools_dir/manifest.toml"
+lockfile="$DIR/release-tools.lock.toml"
+
+if [[ ! -f "$lockfile" ]]; then
+  die "missing release-tool lockfile: $lockfile"
+fi
 
 if [[ ! -f "$manifest" ]]; then
   die "missing release-tool manifest: $manifest"
@@ -51,12 +56,14 @@ archive_contains() {
   tar -t"${compression_flag}"f "$archive" | awk -v expected="$expected" '$0 == expected { found=1 } END { exit(found ? 0 : 1) }'
 }
 
-manifest_value() {
-  local key="$1"
-  sed -n "s/^${key}[[:space:]]*=[[:space:]]*\"\([^\"]*\)\"/\\1/p" "$manifest" | head -n1
+toml_value() {
+  local file="$1"
+  local key="$2"
+  sed -n "s/^${key}[[:space:]]*=[[:space:]]*\"\([^\"]*\)\"/\\1/p" "$file" | head -n1
 }
 
 zig_entries() {
+  local file="$1"
   awk '
     function value(line) {
       sub(/^[^=]*= "/, "", line)
@@ -65,35 +72,81 @@ zig_entries() {
     }
     /^\[\[zig\]\]/ {
       if (in_zig && platform != "") {
-        print platform "|" path "|" sha256 "|" version
+        print platform "|" arch "|" os "|" version "|" url "|" path "|" sha256
       }
       in_zig = 1
-      platform = path = sha256 = version = ""
+      platform = arch = os = version = url = path = sha256 = ""
       next
     }
     /^\[/ {
       if (in_zig && platform != "") {
-        print platform "|" path "|" sha256 "|" version
+        print platform "|" arch "|" os "|" version "|" url "|" path "|" sha256
       }
       in_zig = 0
       next
     }
     in_zig && $1 == "platform" { platform = value($0) }
+    in_zig && $1 == "arch" { arch = value($0) }
+    in_zig && $1 == "os" { os = value($0) }
+    in_zig && $1 == "version" { version = value($0) }
+    in_zig && $1 == "url" { url = value($0) }
     in_zig && $1 == "path" { path = value($0) }
     in_zig && $1 == "sha256" { sha256 = value($0) }
-    in_zig && $1 == "version" { version = value($0) }
     END {
       if (in_zig && platform != "") {
-        print platform "|" path "|" sha256 "|" version
+        print platform "|" arch "|" os "|" version "|" url "|" path "|" sha256
       }
     }
-  ' "$manifest"
+  ' "$file"
+}
+
+cargo_zigbuild_lock_entry() {
+  local file="$1"
+  awk '
+    function value(line) {
+      sub(/^[^=]*= "/, "", line)
+      sub(/"$/, "", line)
+      return line
+    }
+    /^\[cargo_zigbuild\]/ {
+      in_cargo = 1
+      next
+    }
+    /^\[/ {
+      if (in_cargo) {
+        in_cargo = 0
+      }
+      next
+    }
+    in_cargo && $1 == "version" { version = value($0) }
+    in_cargo && $1 == "url" { url = value($0) }
+    in_cargo && $1 == "crate_path" { crate_path = value($0) }
+    in_cargo && $1 == "crate_sha256" { crate_sha256 = value($0) }
+    END {
+      print version "|" url "|" crate_path "|" crate_sha256
+    }
+  ' "$file"
+}
+
+manifest_value() {
+  local key="$1"
+  toml_value "$manifest" "$key"
 }
 
 zig_version="$(read_version_file "$DIR/.zig-version")"
 cargo_zigbuild_version="$(read_version_file "$DIR/.cargo-zigbuild-version")"
+lock_zig_version="$(toml_value "$lockfile" "zig_version")"
+lock_zigbuild_version="$(toml_value "$lockfile" "cargo_zigbuild_version")"
 manifest_zig_version="$(manifest_value "zig_version")"
 manifest_zigbuild_version="$(manifest_value "cargo_zigbuild_version")"
+
+if [[ "$lock_zig_version" != "$zig_version" ]]; then
+  die "release-tools.lock.toml Zig version mismatch (expected ${zig_version}, found ${lock_zig_version:-missing})"
+fi
+
+if [[ "$lock_zigbuild_version" != "$cargo_zigbuild_version" ]]; then
+  die "release-tools.lock.toml cargo-zigbuild version mismatch (expected ${cargo_zigbuild_version}, found ${lock_zigbuild_version:-missing})"
+fi
 
 if [[ "$manifest_zig_version" != "$zig_version" ]]; then
   die "manifest Zig version mismatch (expected ${zig_version}, found ${manifest_zig_version:-missing})"
@@ -103,10 +156,14 @@ if [[ "$manifest_zigbuild_version" != "$cargo_zigbuild_version" ]]; then
   die "manifest cargo-zigbuild version mismatch (expected ${cargo_zigbuild_version}, found ${manifest_zigbuild_version:-missing})"
 fi
 
+if ! diff -u <(zig_entries "$lockfile" | sort) <(zig_entries "$manifest" | sort); then
+  die "release-tool lockfile and manifest Zig entries differ"
+fi
+
 zig_count=0
-while IFS='|' read -r platform path sha256 version; do
+while IFS='|' read -r platform arch os version url path sha256; do
   zig_count=$((zig_count + 1))
-  if [[ -z "$platform" || -z "$path" || -z "$sha256" || -z "$version" ]]; then
+  if [[ -z "$platform" || -z "$arch" || -z "$os" || -z "$version" || -z "$url" || -z "$path" || -z "$sha256" ]]; then
     die "invalid Zig entry in release-tool manifest"
   fi
   if [[ "$version" != "$zig_version" ]]; then
@@ -121,10 +178,23 @@ while IFS='|' read -r platform path sha256 version; do
     die "Zig checksum mismatch for $path"
   fi
   validate_tar_entries "$artifact" J
-done < <(zig_entries)
+done < <(zig_entries "$manifest")
 
 if [[ "$zig_count" -ne 4 ]]; then
   die "expected 4 vendored Zig artifacts, found $zig_count"
+fi
+
+lock_cargo_zigbuild_entry="$(cargo_zigbuild_lock_entry "$lockfile")"
+manifest_cargo_zigbuild_entry="$(cargo_zigbuild_lock_entry "$manifest")"
+if [[ "$lock_cargo_zigbuild_entry" != "$manifest_cargo_zigbuild_entry" ]]; then
+  die "release-tool lockfile and manifest cargo-zigbuild upstream entries differ"
+fi
+IFS='|' read -r lock_cargo_entry_version lock_cargo_entry_url lock_cargo_entry_path lock_cargo_entry_sha256 <<< "$lock_cargo_zigbuild_entry"
+if [[ -z "$lock_cargo_entry_version" || -z "$lock_cargo_entry_url" || -z "$lock_cargo_entry_path" || -z "$lock_cargo_entry_sha256" ]]; then
+  die "release-tools.lock.toml is missing cargo-zigbuild upstream fields"
+fi
+if [[ "$lock_cargo_entry_version" != "$cargo_zigbuild_version" ]]; then
+  die "release-tools.lock.toml cargo-zigbuild entry version mismatch (expected ${cargo_zigbuild_version}, found ${lock_cargo_entry_version})"
 fi
 
 cargo_crate_path="$(manifest_value "crate_path")"
@@ -237,4 +307,10 @@ if grep -nE '\bcurl\b|cargo install[[:space:]].*--version|rustup target add|unse
   die "script/install-zig must remain offline-only"
 fi
 
-echo -e "${GREEN}release-tool manifest verified${OFF}"
+for script in "$DIR/script/vendor-release-tools" "$DIR/script/install-zig" "$DIR/script/validate-release-tools"; do
+  if grep -nE '[[:xdigit:]]{64}' "$script"; then
+    die "${script#$DIR/} must not contain embedded SHA-256 literals; use release-tools.lock.toml or the generated manifest"
+  fi
+done
+
+echo -e "${GREEN}release-tool lockfile and manifest verified${OFF}"

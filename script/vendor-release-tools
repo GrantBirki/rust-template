@@ -17,6 +17,11 @@ release_tools_dir="$DIR/vendor/release-tools"
 zig_dir="$release_tools_dir/zig"
 cargo_dir="$release_tools_dir/cargo-zigbuild"
 manifest="$release_tools_dir/manifest.toml"
+lockfile="$DIR/release-tools.lock.toml"
+
+if [[ ! -f "$lockfile" ]]; then
+  die "missing release-tool lockfile: $lockfile"
+fi
 
 zig_version="$(read_version_file "$DIR/.zig-version")"
 cargo_zigbuild_version="$(read_version_file "$DIR/.cargo-zigbuild-version")"
@@ -37,6 +42,87 @@ sha256_file() {
     sha256sum "$file" | awk '{print $1}'
   fi
 }
+
+toml_value() {
+  local file="$1"
+  local key="$2"
+  sed -n "s/^${key}[[:space:]]*=[[:space:]]*\"\([^\"]*\)\"/\\1/p" "$file" | head -n1
+}
+
+locked_zig_entries() {
+  awk '
+    function value(line) {
+      sub(/^[^=]*= "/, "", line)
+      sub(/"$/, "", line)
+      return line
+    }
+    /^\[\[zig\]\]/ {
+      if (in_zig && platform != "") {
+        print platform "|" arch "|" os "|" version "|" url "|" path "|" sha256
+      }
+      in_zig = 1
+      platform = arch = os = version = url = path = sha256 = ""
+      next
+    }
+    /^\[/ {
+      if (in_zig && platform != "") {
+        print platform "|" arch "|" os "|" version "|" url "|" path "|" sha256
+      }
+      in_zig = 0
+      next
+    }
+    in_zig && $1 == "platform" { platform = value($0) }
+    in_zig && $1 == "arch" { arch = value($0) }
+    in_zig && $1 == "os" { os = value($0) }
+    in_zig && $1 == "version" { version = value($0) }
+    in_zig && $1 == "url" { url = value($0) }
+    in_zig && $1 == "path" { path = value($0) }
+    in_zig && $1 == "sha256" { sha256 = value($0) }
+    END {
+      if (in_zig && platform != "") {
+        print platform "|" arch "|" os "|" version "|" url "|" path "|" sha256
+      }
+    }
+  ' "$lockfile"
+}
+
+locked_cargo_zigbuild_entry() {
+  awk '
+    function value(line) {
+      sub(/^[^=]*= "/, "", line)
+      sub(/"$/, "", line)
+      return line
+    }
+    /^\[cargo_zigbuild\]/ {
+      in_cargo = 1
+      next
+    }
+    /^\[/ {
+      if (in_cargo) {
+        in_cargo = 0
+      }
+      next
+    }
+    in_cargo && $1 == "version" { version = value($0) }
+    in_cargo && $1 == "url" { url = value($0) }
+    in_cargo && $1 == "crate_path" { crate_path = value($0) }
+    in_cargo && $1 == "crate_sha256" { crate_sha256 = value($0) }
+    END {
+      print version "|" url "|" crate_path "|" crate_sha256
+    }
+  ' "$lockfile"
+}
+
+locked_zig_version="$(toml_value "$lockfile" "zig_version")"
+locked_zigbuild_version="$(toml_value "$lockfile" "cargo_zigbuild_version")"
+
+if [[ "$locked_zig_version" != "$zig_version" ]]; then
+  die "release-tools.lock.toml Zig version mismatch (expected ${zig_version}, found ${locked_zig_version:-missing})"
+fi
+
+if [[ "$locked_zigbuild_version" != "$cargo_zigbuild_version" ]]; then
+  die "release-tools.lock.toml cargo-zigbuild version mismatch (expected ${cargo_zigbuild_version}, found ${locked_zigbuild_version:-missing})"
+fi
 
 fetch() {
   local url="$1"
@@ -138,11 +224,24 @@ add_zig_artifact() {
   local platform="$1"
   local arch="$2"
   local os="$3"
-  local expected_sha256="$4"
-  local filename="zig-${arch}-${os}-${zig_version}.tar.xz"
-  local url="https://ziglang.org/download/${zig_version}/${filename}"
+  local version="$4"
+  local url="$5"
+  local dest="$6"
+  local expected_sha256="$7"
+  local filename="${dest##*/}"
   local tmp_artifact="$tmpdir/$filename"
-  local dest="vendor/release-tools/zig/$filename"
+
+  if [[ -z "$platform" || -z "$arch" || -z "$os" || -z "$version" || -z "$url" || -z "$dest" || -z "$expected_sha256" ]]; then
+    die "invalid Zig entry in release-tools.lock.toml"
+  fi
+
+  if [[ "$version" != "$zig_version" ]]; then
+    die "Zig lock entry version mismatch for ${platform}"
+  fi
+
+  if [[ "$dest" != vendor/release-tools/zig/* ]]; then
+    die "Zig lock entry has unexpected path for ${platform}: $dest"
+  fi
 
   echo "fetching $url"
   fetch "$url" "$tmp_artifact"
@@ -160,7 +259,7 @@ add_zig_artifact() {
     echo "platform = \"$platform\""
     echo "arch = \"$arch\""
     echo "os = \"$os\""
-    echo "version = \"$zig_version\""
+    echo "version = \"$version\""
     echo "url = \"$url\""
     echo "path = \"$dest\""
     echo "sha256 = \"$actual_sha256\""
@@ -168,19 +267,39 @@ add_zig_artifact() {
   } >> "$zig_manifest_file"
 }
 
-add_zig_artifact "macos-x86_64" "x86_64" "macos" "0387557ed1877bc6a2e1802c8391953baddba76081876301c522f52977b52ba7"
-add_zig_artifact "macos-aarch64" "aarch64" "macos" "b23d70deaa879b5c2d486ed3316f7eaa53e84acf6fc9cc747de152450d401489"
-add_zig_artifact "linux-x86_64" "x86_64" "linux" "70e49664a74374b48b51e6f3fdfbf437f6395d42509050588bd49abe52ba3d00"
-add_zig_artifact "linux-aarch64" "aarch64" "linux" "ea4b09bfb22ec6f6c6ceac57ab63efb6b46e17ab08d21f69f3a48b38e1534f17"
+zig_count=0
+while IFS='|' read -r platform arch os version url dest expected_sha256; do
+  add_zig_artifact "$platform" "$arch" "$os" "$version" "$url" "$dest" "$expected_sha256"
+  zig_count=$((zig_count + 1))
+done < <(locked_zig_entries)
 
-cargo_crate="cargo-zigbuild-${cargo_zigbuild_version}.crate"
-cargo_url="https://static.crates.io/crates/cargo-zigbuild/${cargo_crate}"
+if [[ "$zig_count" -ne 4 ]]; then
+  die "expected 4 Zig entries in release-tools.lock.toml, found $zig_count"
+fi
+
+IFS='|' read -r locked_cargo_version cargo_url cargo_dest expected_cargo_crate_sha256 < <(locked_cargo_zigbuild_entry)
+
+if [[ -z "$locked_cargo_version" || -z "$cargo_url" || -z "$cargo_dest" || -z "$expected_cargo_crate_sha256" ]]; then
+  die "release-tools.lock.toml is missing cargo-zigbuild fields"
+fi
+
+if [[ "$locked_cargo_version" != "$cargo_zigbuild_version" ]]; then
+  die "cargo-zigbuild lock entry version mismatch (expected ${cargo_zigbuild_version}, found ${locked_cargo_version})"
+fi
+
+if [[ "$cargo_dest" != "vendor/release-tools/cargo-zigbuild/cargo-zigbuild-${cargo_zigbuild_version}.crate" ]]; then
+  die "cargo-zigbuild lock entry has unexpected crate path: $cargo_dest"
+fi
+
+cargo_crate="${cargo_dest##*/}"
 cargo_tmp="$tmpdir/$cargo_crate"
-cargo_dest="vendor/release-tools/cargo-zigbuild/$cargo_crate"
 
 echo "fetching $cargo_url"
 fetch "$cargo_url" "$cargo_tmp"
 cargo_crate_sha256="$(sha256_file "$cargo_tmp")"
+if [[ "$cargo_crate_sha256" != "$expected_cargo_crate_sha256" ]]; then
+  die "cargo-zigbuild crate checksum mismatch (expected $expected_cargo_crate_sha256, found $cargo_crate_sha256)"
+fi
 mv "$cargo_tmp" "$DIR/$cargo_dest"
 
 extract_dir="$tmpdir/cargo-zigbuild-source"
