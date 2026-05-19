@@ -25,6 +25,9 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: prepare rust
+        run: script/prepare-rust
+
       - name: bootstrap
         run: script/bootstrap
 

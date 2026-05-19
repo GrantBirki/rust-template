@@ -312,7 +312,7 @@ require_pattern() {
 }
 
 for workflow in "$DIR/.github/workflows/build.yml" "$DIR/.github/workflows/release.yml"; do
-  if grep -nE '\bcurl\b|cargo install[[:space:]].*--version|rustup target add|setup-rust-toolchain' "$workflow"; then
+  if grep -nE '\bcurl\b|cargo install[[:space:]].*--version|rustup target add|setup-rust-toolchain|script/prepare-rust' "$workflow"; then
     die "${workflow#$DIR/} contains networked release-tool installation commands"
   fi
 done
@@ -321,7 +321,7 @@ require_pattern "$DIR/.github/workflows/build.yml" 'script/install-zig' "build w
 require_pattern "$DIR/.github/workflows/build.yml" 'script/verify-release-toolchain' "build workflow must verify the release toolchain"
 require_pattern "$DIR/.github/workflows/build.yml" 'script/build --release' "build workflow must run release-mode packaging"
 
-if grep -nE '\bcurl\b|cargo install[[:space:]].*--version|rustup target add|unset CARGO_NET_OFFLINE|unset RUSTUP_OFFLINE' "$DIR/script/install-zig"; then
+if grep -nE '\bcurl\b|cargo install[[:space:]].*--version|rustup target add|unset CARGO_NET_OFFLINE|unset RUSTUP_AUTO_INSTALL|RUSTUP_AUTO_INSTALL[[:space:]]*=' "$DIR/script/install-zig"; then
   die "script/install-zig must remain offline-only"
 fi
 

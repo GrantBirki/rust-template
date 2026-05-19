@@ -37,14 +37,14 @@ The template is meant to be copied into services, CLIs, and libraries that must 
 - `rust-toolchain.toml`, `.rust-version`, `Cargo.toml` `rust-version`, `.zig-version`, `.cargo-zigbuild-version`, `release-tools.lock.toml`, and `vendor/release-tools/manifest.toml` must stay consistent with actual supported tools.
 - GitHub Actions must be pinned to full commit SHAs.
 - Checkout steps should use `persist-credentials: false` unless a job explicitly needs credentials persisted.
-- The Rust toolchain and Rust target standard libraries are not vendored in this pass. Hosted runners may still hydrate the pinned Rust toolchain if it is missing; fully egress-blocked jobs require Rust and target standard libraries to be present or vendored in a future pass.
+- The Rust toolchain and Rust target standard libraries are not vendored in this pass. `script/prepare-rust` is the explicit online preparation path for local developers and hosted lint/test validation; stricter build and release jobs require Rust and target standard libraries to be present or vendored in a future pass.
 
 ## Hermeticity Model
 
 There are three different levels in this template. Keep them distinct when editing docs or workflows.
 
-1. Local daily workflow: offline Cargo validation through vendored sources. This is what `script/bootstrap`, `script/test`, `script/lint`, `script/build`, and `script/server` enforce.
-2. GitHub-hosted validation: offline Cargo and release-tool behavior on hosted runners. This proves the repo does not ask Cargo, rustup, Zig, or `cargo-zigbuild` installation paths to download during build jobs, but it does not prove the runner itself is air-gapped.
+1. Local project workflow: explicit online Rust preparation with `script/prepare-rust` when needed, then offline Cargo validation through vendored sources. `script/bootstrap`, `script/test`, `script/lint`, `script/build`, and `script/server` enforce the offline phase.
+2. GitHub-hosted validation: `lint` and `test` follow the same prepare-then-offline model as local development. Hosted runners are not air-gapped infrastructure, and the stricter `build` and `release` workflows intentionally do not prepare Rust for the runner.
 3. Egress-blocked build/package jobs: after checkout and action loading, build/test/package jobs can run without third-party network access because application crates and release tools are committed. Release publish/sign/verify jobs still need GitHub API access.
 
 Do not describe GitHub-hosted runners as fully air-gapped. They can validate offline script behavior, but they are not an egress-blocked environment.
@@ -68,10 +68,15 @@ All scripts live in `script/` and should use `set -euo pipefail` unless there is
 
 - `script/env`
   - Shared environment and helper functions.
-  - Exports offline Cargo/rustup defaults.
+  - Exports offline Cargo defaults and disables rustup proxy auto-installation.
   - Outside CI, defaults `RUNNER_TEMP` and `TMPDIR` to `target/tmp` unless the caller already set them.
   - Defines `DIR`, `VENDOR_DIR`, toolchain checks, vendor checks, and common `die`/`warn` helpers.
   - Do not add network behavior here.
+
+- `script/prepare-rust`
+  - Explicit online Rust preparation path for local developers and hosted lint/test validation.
+  - Installs the exact Rust toolchain from `rust-toolchain.toml` with the minimal profile plus `rustfmt` and `clippy`.
+  - Does not install cross-target standard libraries.
 
 - `script/bootstrap`
   - Validates Rust and Cargo availability.
@@ -166,10 +171,11 @@ If any version file changes, update docs and verify the corresponding script beh
 ## CI Expectations
 
 - The `build` workflow is the PR-based release smoke test. It should install vendored release tools, verify them, run `script/bootstrap`, and run `script/build --release`.
-- Daily lint/test workflows should run `script/bootstrap` first.
-- Daily jobs should rely on offline defaults from `script/env`.
+- Hosted lint/test workflows should run `script/prepare-rust`, then `script/bootstrap`, then their offline validation command.
+- Hosted validation should rely on offline defaults from `script/env` after explicit preparation completes.
+- The `build` workflow is intentionally stricter and must not call `script/prepare-rust`; it should fail loudly if the runner lacks the pinned Rust toolchain.
 - Do not add toolchain download actions to daily lint/test/build workflows.
-- Release build jobs should run `script/install-zig`, then `script/verify-release-toolchain`, then `script/bootstrap`, then `script/build --release ...`.
+- Release build jobs should run `script/install-zig`, then `script/verify-release-toolchain`, then `script/bootstrap`, then `script/build --release ...`; they must not call `script/prepare-rust`.
 - Release build jobs must install release tools from committed artifacts. Cross-target release jobs must fail if required Rust targets are missing.
 - Release publication should use a protected `release` environment.
 - Final release assets should be re-downloaded from GitHub Releases, checksum-verified, and attestation-verified.
