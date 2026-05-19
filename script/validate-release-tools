@@ -40,7 +40,7 @@ archive_contains() {
   local compression_flag="$2"
   local expected="$3"
 
-  tar -t"${compression_flag}"f "$archive" | grep -qxF "$expected"
+  tar -t"${compression_flag}"f "$archive" | awk -v expected="$expected" '$0 == expected { found=1 } END { exit(found ? 0 : 1) }'
 }
 
 manifest_value() {
