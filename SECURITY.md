@@ -32,7 +32,7 @@ GitHub-hosted runners are not fully air-gapped infrastructure. They validate tha
 Release build tooling is vendored in `vendor/release-tools`:
 
 - Zig host archives are committed and checksum-verified before extraction.
-- `cargo-zigbuild` source, lockfile, crate archive, and vendored transitive crates are committed.
+- `cargo-zigbuild` crate, source archive, lockfile, and vendored transitive dependency archive are committed and checksum-verified before extraction.
 - `script/install-zig` installs release tools from committed artifacts only.
 - `script/vendor-release-tools` is the only online release-tool refresh path.
 

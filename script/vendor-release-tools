@@ -10,14 +10,12 @@ unset RUSTUP_OFFLINE
 
 require_cmd cargo
 require_cmd curl
+require_cmd python3
 require_cmd tar
 
 release_tools_dir="$DIR/vendor/release-tools"
 zig_dir="$release_tools_dir/zig"
 cargo_dir="$release_tools_dir/cargo-zigbuild"
-cargo_crate_dir="$cargo_dir/crate"
-cargo_source_parent="$cargo_dir/source"
-cargo_vendor_dir="$cargo_dir/vendor/cache"
 manifest="$release_tools_dir/manifest.toml"
 
 zig_version="$(read_version_file "$DIR/.zig-version")"
@@ -46,6 +44,84 @@ fetch() {
   curl -fsSL "$url" -o "$dest"
 }
 
+create_deterministic_targz() {
+  local source_dir="$1"
+  local dest="$2"
+  local archive_root="$3"
+
+  python3 - "$source_dir" "$dest" "$archive_root" <<'PY'
+import gzip
+import os
+import shutil
+import sys
+import tarfile
+from pathlib import Path
+
+source = Path(sys.argv[1]).resolve()
+dest = Path(sys.argv[2]).resolve()
+archive_root = sys.argv[3].strip("/")
+
+if not source.is_dir():
+    raise SystemExit(f"source directory does not exist: {source}")
+if not archive_root:
+    raise SystemExit("archive root is required")
+
+dest.parent.mkdir(parents=True, exist_ok=True)
+plain_tar = dest.with_name(dest.name + ".tar.tmp")
+gzip_tmp = dest.with_name(dest.name + ".tmp")
+
+def normalized_info(path: Path, arcname: str) -> tarfile.TarInfo:
+    info = tarfile.TarInfo(arcname)
+    st = path.lstat()
+    info.uid = 0
+    info.gid = 0
+    info.uname = ""
+    info.gname = ""
+    info.mtime = 0
+
+    if path.is_symlink():
+        info.type = tarfile.SYMTYPE
+        info.linkname = os.readlink(path)
+        info.mode = 0o777
+    elif path.is_dir():
+        info.type = tarfile.DIRTYPE
+        info.mode = 0o755
+    elif path.is_file():
+        info.size = st.st_size
+        info.mode = 0o755 if (st.st_mode & 0o111) else 0o644
+    else:
+        raise SystemExit(f"unsupported archive entry type: {path}")
+
+    return info
+
+paths = [source]
+paths.extend(sorted(source.rglob("*"), key=lambda p: p.relative_to(source).as_posix()))
+
+try:
+    with tarfile.open(plain_tar, mode="w", format=tarfile.PAX_FORMAT) as tar:
+        for path in paths:
+            rel = "" if path == source else path.relative_to(source).as_posix()
+            arcname = archive_root if rel == "" else f"{archive_root}/{rel}"
+            info = normalized_info(path, arcname)
+            if path.is_file() and not path.is_symlink():
+                with path.open("rb") as handle:
+                    tar.addfile(info, handle)
+            else:
+                tar.addfile(info)
+
+    with plain_tar.open("rb") as src, gzip_tmp.open("wb") as raw:
+        with gzip.GzipFile(filename="", mode="wb", fileobj=raw, mtime=0) as gz:
+            shutil.copyfileobj(src, gz)
+    os.replace(gzip_tmp, dest)
+finally:
+    for tmp in (plain_tar, gzip_tmp):
+        try:
+            tmp.unlink()
+        except FileNotFoundError:
+            pass
+PY
+}
+
 tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/rust-template-release-tools.XXXXXX")"
 cleanup() {
   rm -rf "$tmpdir"
@@ -53,7 +129,7 @@ cleanup() {
 trap cleanup EXIT
 
 rm -rf "$release_tools_dir"
-mkdir -p "$zig_dir" "$cargo_crate_dir" "$cargo_source_parent" "$cargo_vendor_dir"
+mkdir -p "$zig_dir" "$cargo_dir"
 
 zig_manifest_file="$tmpdir/zig-manifest.toml"
 : > "$zig_manifest_file"
@@ -100,7 +176,7 @@ add_zig_artifact "linux-aarch64" "aarch64" "linux" "958ed7d1e00d0ea76590d27666ef
 cargo_crate="cargo-zigbuild-${cargo_zigbuild_version}.crate"
 cargo_url="https://static.crates.io/crates/cargo-zigbuild/${cargo_crate}"
 cargo_tmp="$tmpdir/$cargo_crate"
-cargo_dest="vendor/release-tools/cargo-zigbuild/crate/$cargo_crate"
+cargo_dest="vendor/release-tools/cargo-zigbuild/$cargo_crate"
 
 echo "fetching $cargo_url"
 fetch "$cargo_url" "$cargo_tmp"
@@ -116,16 +192,29 @@ if [[ ! -f "$tmp_source_dir/Cargo.toml" ]]; then
   die "cargo-zigbuild crate did not unpack to expected source directory"
 fi
 
+cargo_vendor_parent="$tmpdir/cargo-zigbuild-${cargo_zigbuild_version}-vendor"
+cargo_vendor_cache="$cargo_vendor_parent/cache"
+mkdir -p "$cargo_vendor_cache"
+
 (
   cd "$tmp_source_dir"
   cargo generate-lockfile
-  cargo vendor --locked --versioned-dirs "$cargo_vendor_dir"
+  cargo vendor --locked --versioned-dirs "$cargo_vendor_cache"
 )
 
-cp -R "$tmp_source_dir" "$cargo_source_parent/"
+cargo_source_archive="cargo-zigbuild-${cargo_zigbuild_version}-source.tar.gz"
+cargo_vendor_archive="cargo-zigbuild-${cargo_zigbuild_version}-vendor.tar.gz"
+cargo_source_archive_dest="vendor/release-tools/cargo-zigbuild/$cargo_source_archive"
+cargo_vendor_archive_dest="vendor/release-tools/cargo-zigbuild/$cargo_vendor_archive"
+cargo_source_archive_root="cargo-zigbuild-${cargo_zigbuild_version}"
+cargo_vendor_archive_root="cargo-zigbuild-${cargo_zigbuild_version}-vendor"
+cargo_vendor_dir_in_archive="${cargo_vendor_archive_root}/cache"
 
-cargo_source_dir="vendor/release-tools/cargo-zigbuild/source/cargo-zigbuild-${cargo_zigbuild_version}"
-cargo_vendor_rel="vendor/release-tools/cargo-zigbuild/vendor/cache"
+create_deterministic_targz "$tmp_source_dir" "$DIR/$cargo_source_archive_dest" "$cargo_source_archive_root"
+create_deterministic_targz "$cargo_vendor_parent" "$DIR/$cargo_vendor_archive_dest" "$cargo_vendor_archive_root"
+
+cargo_source_archive_sha256="$(sha256_file "$DIR/$cargo_source_archive_dest")"
+cargo_vendor_archive_sha256="$(sha256_file "$DIR/$cargo_vendor_archive_dest")"
 
 {
   echo "# Generated by script/vendor-release-tools."
@@ -142,8 +231,13 @@ cargo_vendor_rel="vendor/release-tools/cargo-zigbuild/vendor/cache"
   echo "url = \"$cargo_url\""
   echo "crate_path = \"$cargo_dest\""
   echo "crate_sha256 = \"$cargo_crate_sha256\""
-  echo "source_dir = \"$cargo_source_dir\""
-  echo "vendor_dir = \"$cargo_vendor_rel\""
+  echo "source_archive_path = \"$cargo_source_archive_dest\""
+  echo "source_archive_sha256 = \"$cargo_source_archive_sha256\""
+  echo "source_archive_root = \"$cargo_source_archive_root\""
+  echo "vendor_archive_path = \"$cargo_vendor_archive_dest\""
+  echo "vendor_archive_sha256 = \"$cargo_vendor_archive_sha256\""
+  echo "vendor_archive_root = \"$cargo_vendor_archive_root\""
+  echo "vendor_dir = \"$cargo_vendor_dir_in_archive\""
 } > "$manifest"
 
 script/validate-release-tools

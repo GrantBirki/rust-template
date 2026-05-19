@@ -37,11 +37,11 @@ The daily workflow is offline by default. `script/bootstrap`, `script/test`, `sc
 
 GitHub-hosted lint/test/build jobs validate offline Cargo behavior, but hosted runners are not fully air-gapped infrastructure. Checkout, action loading, artifact upload, release publication, and attestation verification still use GitHub platform services.
 
-Release build jobs install Zig and `cargo-zigbuild` from committed artifacts under `vendor/release-tools`. Those artifacts are refreshed only by `script/vendor-release-tools`, which is intentionally online-only and records checksums in `vendor/release-tools/manifest.toml`.
+Release build jobs install Zig and `cargo-zigbuild` from committed artifacts under `vendor/release-tools`. Zig is kept as upstream `.tar.xz` archives. `cargo-zigbuild` source and vendored dependencies are kept as deterministic `.tar.gz` archives that CI verifies and expands under `${RUNNER_TEMP}`. Those artifacts are refreshed only by `script/vendor-release-tools`, which is intentionally online-only and records checksums in `vendor/release-tools/manifest.toml`.
 
 This first pass does not vendor the Rust toolchain or Rust target standard libraries. Hosted runners may still hydrate the pinned Rust toolchain if it is missing; fully egress-blocked build jobs require Rust and any required target standard libraries to already be present or vendored in a future pass.
 
-The `build` workflow is the PR-based release smoke test. It installs the vendored release tools, verifies them, then runs `script/build --release` so PRs exercise most of the release build path before a merge to `main` can publish a release. This intentionally trades CI time for fewer release-time network and supply-chain dependencies; the primary cost is compiling `cargo-zigbuild` from committed source on each runner.
+The `build` workflow is the PR-based release smoke test. It installs the vendored release tools, verifies them, then runs `script/build --release` so PRs exercise most of the release build path before a merge to `main` can publish a release. This intentionally trades CI time for fewer release-time network and supply-chain dependencies; the primary cost is compiling `cargo-zigbuild` from committed, archived source on each runner.
 
 ## CLI Usage (Example)
 
@@ -110,7 +110,7 @@ Release-tool updates are separate from application dependency updates:
 script/vendor-release-tools
 ```
 
-This refreshes committed Zig tarballs, the `cargo-zigbuild` crate, the `cargo-zigbuild` lockfile, its vendored dependency tree, and `vendor/release-tools/manifest.toml`. Do not mix release-tool vendoring with normal application dependency updates.
+This refreshes committed Zig tarballs, the `cargo-zigbuild` crate, deterministic `cargo-zigbuild` source/vendor archives, and `vendor/release-tools/manifest.toml`. Review release-tool updates by checking version pins, upstream URLs, checksums, manifest changes, and the vendoring scripts rather than treating GitHub's expanded archive diff as first-party code. Do not mix release-tool vendoring with normal application dependency updates.
 
 ## Release Process
 
