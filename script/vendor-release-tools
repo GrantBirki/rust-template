@@ -49,6 +49,17 @@ toml_value() {
   sed -n "s/^${key}[[:space:]]*=[[:space:]]*\"\([^\"]*\)\"/\\1/p" "$file" | head -n1
 }
 
+reject_unsafe_relative_path() {
+  local path="$1"
+  local description="$2"
+
+  case "$path" in
+    ""|/*|../*|*/../*|*/..|..)
+      die "${description} contains unsafe path: $path"
+      ;;
+  esac
+}
+
 locked_zig_entries() {
   awk '
     function value(line) {
@@ -242,6 +253,7 @@ add_zig_artifact() {
   if [[ "$dest" != vendor/release-tools/zig/* ]]; then
     die "Zig lock entry has unexpected path for ${platform}: $dest"
   fi
+  reject_unsafe_relative_path "$dest" "Zig lock entry path for ${platform}"
 
   echo "fetching $url"
   fetch "$url" "$tmp_artifact"
@@ -290,6 +302,7 @@ fi
 if [[ "$cargo_dest" != "vendor/release-tools/cargo-zigbuild/cargo-zigbuild-${cargo_zigbuild_version}.crate" ]]; then
   die "cargo-zigbuild lock entry has unexpected crate path: $cargo_dest"
 fi
+reject_unsafe_relative_path "$cargo_dest" "cargo-zigbuild lock entry crate path"
 
 cargo_crate="${cargo_dest##*/}"
 cargo_tmp="$tmpdir/$cargo_crate"

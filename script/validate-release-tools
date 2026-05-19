@@ -62,6 +62,17 @@ toml_value() {
   sed -n "s/^${key}[[:space:]]*=[[:space:]]*\"\([^\"]*\)\"/\\1/p" "$file" | head -n1
 }
 
+reject_unsafe_relative_path() {
+  local path="$1"
+  local description="$2"
+
+  case "$path" in
+    ""|/*|../*|*/../*|*/..|..)
+      die "${description} contains unsafe path: $path"
+      ;;
+  esac
+}
+
 zig_entries() {
   local file="$1"
   awk '
@@ -169,6 +180,7 @@ while IFS='|' read -r platform arch os version url path sha256; do
   if [[ "$version" != "$zig_version" ]]; then
     die "Zig entry version mismatch for ${platform}"
   fi
+  reject_unsafe_relative_path "$path" "Zig manifest path for ${platform}"
   artifact="$DIR/$path"
   if [[ ! -f "$artifact" ]]; then
     die "missing Zig artifact: $path"
@@ -196,6 +208,7 @@ fi
 if [[ "$lock_cargo_entry_version" != "$cargo_zigbuild_version" ]]; then
   die "release-tools.lock.toml cargo-zigbuild entry version mismatch (expected ${cargo_zigbuild_version}, found ${lock_cargo_entry_version})"
 fi
+reject_unsafe_relative_path "$lock_cargo_entry_path" "release-tools.lock.toml cargo-zigbuild crate path"
 
 cargo_crate_path="$(manifest_value "crate_path")"
 cargo_crate_sha256="$(manifest_value "crate_sha256")"
@@ -212,6 +225,11 @@ cargo_lockfile_sha256="$(manifest_value "lockfile_sha256")"
 if [[ -z "$cargo_crate_path" || -z "$cargo_crate_sha256" || -z "$cargo_source_archive_path" || -z "$cargo_source_archive_sha256" || -z "$cargo_source_archive_root" || -z "$cargo_vendor_archive_path" || -z "$cargo_vendor_archive_sha256" || -z "$cargo_vendor_archive_root" || -z "$cargo_vendor_dir" || -z "$cargo_lockfile_path" || -z "$cargo_lockfile_sha256" ]]; then
   die "manifest is missing cargo-zigbuild fields"
 fi
+
+reject_unsafe_relative_path "$cargo_crate_path" "manifest cargo-zigbuild crate path"
+reject_unsafe_relative_path "$cargo_source_archive_path" "manifest cargo-zigbuild source archive path"
+reject_unsafe_relative_path "$cargo_vendor_archive_path" "manifest cargo-zigbuild vendor archive path"
+reject_unsafe_relative_path "$cargo_lockfile_path" "manifest cargo-zigbuild lockfile path"
 
 cargo_crate="$DIR/$cargo_crate_path"
 if [[ ! -f "$cargo_crate" ]]; then
