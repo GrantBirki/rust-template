@@ -4,6 +4,8 @@ set -euo pipefail
 
 source script/env "$@"
 
+ensure_rust_toolchain
+
 usage() {
   echo -e "${RED}usage:${OFF} script/build [--release] [--target <triple>] [--targets <triple,...>] [--dist-dir <dir>] [--universal-darwin]" >&2
 }

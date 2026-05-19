@@ -4,9 +4,10 @@ set -euo pipefail
 
 source script/env "$@"
 
+ensure_rust_toolchain
+
 # This is the intentional online release-tool refresh path.
 unset CARGO_NET_OFFLINE
-unset RUSTUP_OFFLINE
 
 require_cmd cargo
 require_cmd curl
