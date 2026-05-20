@@ -22,7 +22,7 @@ Some security controls cannot be fully represented in tracked files. Configure t
 - Keep GitHub Actions pinned to full commit SHAs.
 - Do not allow untrusted pull request workflows to receive write tokens.
 - Test, lint, and PR build jobs may run the explicit `script/prepare-rust` preflight, then should stay on the normal offline script surface.
-- Build and release-build jobs should not download third-party tools after checkout/action loading.
+- Protected release-build jobs should not run Rust preparation or download third-party tools after checkout/action loading; they rely on preprovisioned Rust toolchains and committed release-tool artifacts.
 - Keep the `build` workflow as the PR-based release smoke test: install vendored release tools, verify them, then run release-mode packaging.
 - If an egress-blocking action is added, apply it to build/test/package jobs after checkout and before scripts run. Do not apply it to release publishing, signing, or verification jobs unless those jobs are split into an explicitly GitHub-network-allowed phase.
 
