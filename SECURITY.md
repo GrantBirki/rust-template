@@ -9,14 +9,14 @@ This repository is a template. Security fixes are applied to the latest `main` b
 - Cargo dependencies must be exact-pinned where practical.
 - `Cargo.lock` must be committed.
 - `vendor/cache` must be committed.
-- Normal build, test, lint, run, and release-build workflows must not require third-party tool downloads.
+- Routine repo scripts must not implicitly download third-party tools; hosted validation prepares Rust explicitly with `script/prepare-rust` before entering the offline script surface.
 - Cargo dependency updates must use `script/update`.
 - Dependency update changes must include any required `Cargo.lock` and `vendor/cache` changes.
 - Release-tool updates must use `script/vendor-release-tools` and commit `vendor/release-tools` changes.
 
 ## Offline Expectations
 
-The daily scripts are intended to validate offline Cargo behavior:
+The normal offline project scripts are intended to validate offline Cargo behavior:
 
 ```console
 script/bootstrap
@@ -25,7 +25,7 @@ script/lint
 script/build
 ```
 
-GitHub-hosted runners are not fully air-gapped infrastructure. They validate that the repository scripts do not ask Cargo or rustup to download during daily jobs. Checkout, action loading, artifact transfer, release publication, and attestation verification still require GitHub platform access.
+GitHub-hosted runners are not fully air-gapped infrastructure. Hosted lint, test, and PR build validation may run `script/prepare-rust` first, then the repository scripts stay on the offline surface. Those offline scripts do not ask Cargo or rustup to hydrate dependencies or toolchains implicitly. Checkout, action loading, artifact transfer, release publication, and attestation verification still require GitHub platform access.
 
 ## Release Tooling
 
@@ -36,7 +36,7 @@ Release build tooling is vendored in `vendor/release-tools`:
 - `script/install-zig` installs release tools from committed artifacts only.
 - `script/vendor-release-tools` is the only online release-tool refresh path.
 
-This repository does not yet vendor the Rust toolchain or Rust target standard libraries. Hosted runners may still hydrate the pinned Rust toolchain if it is missing. Fully egress-blocked build jobs require Rust and any required target standard libraries to already be present or vendored in a future pass.
+This repository does not yet vendor the Rust toolchain or Rust target standard libraries. Hosted lint, test, and PR build validation prepare the pinned Rust toolchain explicitly with `script/prepare-rust`. Protected release-build jobs remain stricter: they do not run that preparation step and require Rust plus any requested target standard libraries to already be present or vendored in a future pass.
 
 Release publication, artifact upload/download, and attestation verification are intentionally GitHub-networked operations.
 
