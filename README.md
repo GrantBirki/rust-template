@@ -135,7 +135,7 @@ Releases are triggered by version bumps in `Cargo.toml`:
 2. Commit the change, open a PR, and merge to `main`.
 3. The release workflow detects the version bump, builds artifacts, then creates the `vX.Y.Z` tag and publishes a GitHub release.
 
-Do not create or push tags manually; CI is the source of truth for tags and releases.
+Do not create or push tags manually; CI is the source of truth for tags and releases. The release workflow intentionally has no manual dispatch path.
 
 Release publication should use the protected `release` environment described in `docs/repository-settings.md`.
 

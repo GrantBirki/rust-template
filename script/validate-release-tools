@@ -319,6 +319,10 @@ if grep -nE '\bcurl\b|cargo install[[:space:]].*--version|rustup target add|setu
   die ".github/workflows/release.yml contains networked release-tool installation commands"
 fi
 
+if grep -nE "^[[:space:]]*['\"]?workflow_dispatch['\"]?[[:space:]]*:" "$DIR/.github/workflows/release.yml"; then
+  die ".github/workflows/release.yml must not expose workflow_dispatch"
+fi
+
 require_pattern "$DIR/.github/workflows/build.yml" 'script/prepare-rust' "build workflow must prepare the pinned Rust toolchain explicitly before offline release smoke validation"
 require_pattern "$DIR/.github/workflows/build.yml" 'script/install-zig' "build workflow must exercise vendored release-tool installation"
 require_pattern "$DIR/.github/workflows/build.yml" 'script/verify-release-toolchain' "build workflow must verify the release toolchain"
