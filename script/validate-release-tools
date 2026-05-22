@@ -319,7 +319,7 @@ if grep -nE '\bcurl\b|cargo install[[:space:]].*--version|rustup target add|setu
   die ".github/workflows/release.yml contains networked release-tool installation commands"
 fi
 
-if grep -nE '^[[:space:]]*workflow_dispatch[[:space:]]*:' "$DIR/.github/workflows/release.yml"; then
+if grep -nE "^[[:space:]]*['\"]?workflow_dispatch['\"]?[[:space:]]*:" "$DIR/.github/workflows/release.yml"; then
   die ".github/workflows/release.yml must not expose workflow_dispatch"
 fi
 
