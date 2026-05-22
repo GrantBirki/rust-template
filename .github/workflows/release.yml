@@ -35,9 +35,25 @@ jobs:
           set -euo pipefail
           git fetch --tags --force
 
-          version=$(sed -n 's/^version[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' Cargo.toml | head -n1)
+          version="$(
+            awk '
+              BEGIN { in_package=0 }
+              /^\[package\][[:space:]]*$/ { in_package=1; next }
+              /^\[/ { if (in_package) exit; next }
+              in_package && /^[[:space:]]*version[[:space:]]*=/ {
+                if (match($0, /"[^"]+"/)) {
+                  print substr($0, RSTART + 1, RLENGTH - 2)
+                  exit
+                }
+              }
+            ' Cargo.toml
+          )"
           if [[ -z "$version" ]]; then
             echo "could not parse version from Cargo.toml" >&2
+            exit 1
+          fi
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]; then
+            echo "invalid package version in Cargo.toml: $version" >&2
             exit 1
           fi
           version_tag="v${version}"
@@ -49,8 +65,17 @@ jobs:
           else
             if git cat-file -e "${{ github.event.before }}:Cargo.toml" 2>/dev/null; then
               previous=$(git show "${{ github.event.before }}:Cargo.toml" \
-                | sed -n 's/^version[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' \
-                | head -n1)
+                | awk '
+                    BEGIN { in_package=0 }
+                    /^\[package\][[:space:]]*$/ { in_package=1; next }
+                    /^\[/ { if (in_package) exit; next }
+                    in_package && /^[[:space:]]*version[[:space:]]*=/ {
+                      if (match($0, /"[^"]+"/)) {
+                        print substr($0, RSTART + 1, RLENGTH - 2)
+                        exit
+                      }
+                    }
+                  ')
               if [[ "$previous" != "$version" ]]; then
                 should_release="true"
               fi
@@ -253,9 +278,10 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.version_tag }}
         run: |
           set -euo pipefail
-          tag="${{ needs.prepare.outputs.version_tag }}"
+          tag="$RELEASE_TAG"
           if ! gh release view "$tag" >/dev/null 2>&1; then
             gh release create "$tag" --title "$tag" --notes "Release $tag" --target "${{ github.sha }}"
           fi
@@ -264,9 +290,10 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.version_tag }}
         run: |
           set -euo pipefail
-          tag="${{ needs.prepare.outputs.version_tag }}"
+          tag="$RELEASE_TAG"
           mapfile -d '' files < <(find dist/merged -maxdepth 1 -type f -print0)
           if [[ ${#files[@]} -eq 0 ]]; then
             echo "No release files found in dist/merged"
