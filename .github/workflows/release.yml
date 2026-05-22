@@ -6,7 +6,6 @@ on:
       - main
     paths:
       - "Cargo.toml"
-  workflow_dispatch:
 
 permissions: {}
 
@@ -35,38 +34,85 @@ jobs:
           set -euo pipefail
           git fetch --tags --force
 
-          version=$(sed -n 's/^version[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' Cargo.toml | head -n1)
+          parse_package_version() {
+            awk '
+              function strip_comment(line, out, i, c, in_string, escaped) {
+                out = ""
+                in_string = 0
+                escaped = 0
+                for (i = 1; i <= length(line); i++) {
+                  c = substr(line, i, 1)
+                  if (escaped) {
+                    out = out c
+                    escaped = 0
+                    continue
+                  }
+                  if (c == "\\" && in_string) {
+                    out = out c
+                    escaped = 1
+                    continue
+                  }
+                  if (c == "\"") {
+                    in_string = !in_string
+                  }
+                  if (c == "#" && !in_string) {
+                    break
+                  }
+                  out = out c
+                }
+                return out
+              }
+
+              {
+                line = strip_comment($0)
+                if (line ~ /^[[:space:]]*\[[[:space:]]*package[[:space:]]*\][[:space:]]*$/) {
+                  in_package = 1
+                  next
+                }
+                if (line ~ /^[[:space:]]*\[/) {
+                  if (in_package) {
+                    exit
+                  }
+                  next
+                }
+                if (in_package && line ~ /^[[:space:]]*version[[:space:]]*=/) {
+                  if (match(line, /"[^"]+"/)) {
+                    print substr(line, RSTART + 1, RLENGTH - 2)
+                    exit
+                  }
+                }
+              }
+            ' "$1"
+          }
+
+          version="$(parse_package_version Cargo.toml)"
           if [[ -z "$version" ]]; then
             echo "could not parse version from Cargo.toml" >&2
+            exit 1
+          fi
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$ ]]; then
+            echo "invalid package version in Cargo.toml: $version" >&2
             exit 1
           fi
           version_tag="v${version}"
           source_date_epoch="$(git log -1 --format=%ct HEAD)"
 
           should_release="false"
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            should_release="true"
-          else
-            if git cat-file -e "${{ github.event.before }}:Cargo.toml" 2>/dev/null; then
-              previous=$(git show "${{ github.event.before }}:Cargo.toml" \
-                | sed -n 's/^version[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' \
-                | head -n1)
-              if [[ "$previous" != "$version" ]]; then
-                should_release="true"
-              fi
-            else
+          if git cat-file -e "${{ github.event.before }}:Cargo.toml" 2>/dev/null; then
+            previous="$(git show "${{ github.event.before }}:Cargo.toml" | parse_package_version -)"
+            if [[ "$previous" != "$version" ]]; then
               should_release="true"
             fi
+          else
+            should_release="true"
+          fi
 
-            if ! git diff --name-only "${{ github.event.before }}" "${{ github.sha }}" | grep -qx "Cargo.toml"; then
-              should_release="false"
-            fi
+          if ! git diff --name-only "${{ github.event.before }}" "${{ github.sha }}" | grep -qx "Cargo.toml"; then
+            should_release="false"
           fi
 
           if git rev-parse "$version_tag" >/dev/null 2>&1; then
-            if [[ "${{ github.event_name }}" != "workflow_dispatch" ]]; then
-              should_release="false"
-            fi
+            should_release="false"
           fi
 
           echo "version=${version}" >> "$GITHUB_OUTPUT"
@@ -253,9 +299,10 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.version_tag }}
         run: |
           set -euo pipefail
-          tag="${{ needs.prepare.outputs.version_tag }}"
+          tag="$RELEASE_TAG"
           if ! gh release view "$tag" >/dev/null 2>&1; then
             gh release create "$tag" --title "$tag" --notes "Release $tag" --target "${{ github.sha }}"
           fi
@@ -264,9 +311,10 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.version_tag }}
         run: |
           set -euo pipefail
-          tag="${{ needs.prepare.outputs.version_tag }}"
+          tag="$RELEASE_TAG"
           mapfile -d '' files < <(find dist/merged -maxdepth 1 -type f -print0)
           if [[ ${#files[@]} -eq 0 ]]; then
             echo "No release files found in dist/merged"
@@ -312,10 +360,11 @@ jobs:
           OWNER: ${{ github.repository_owner }}
           REPO: ${{ github.event.repository.name }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.version_tag }}
         run: |
           set -euo pipefail
 
-          tag="${{ needs.prepare.outputs.version_tag }}"
+          tag="$RELEASE_TAG"
           rm -rf release-download
           mkdir -p release-download
           gh release download "$tag" --dir release-download
@@ -345,10 +394,13 @@ jobs:
           path: "dist/"
 
       - name: show homebrew inputs
+        env:
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.version_tag }}
         run: |
           set -euo pipefail
-          version="${{ needs.prepare.outputs.version }}"
-          tag="${{ needs.prepare.outputs.version_tag }}"
+          version="$RELEASE_VERSION"
+          tag="$RELEASE_TAG"
           purple=$'\033[0;35m'
           off=$'\033[0m'
           echo "Release version: ${version}"

@@ -30,6 +30,7 @@ The template is meant to be copied into services, CLIs, and libraries that must 
 - `script/install-zig` must stay offline-only. It installs Zig and `cargo-zigbuild` from committed artifacts under `vendor/release-tools`.
 - Release build jobs must not run `curl`, `cargo install --version`, `rustup target add`, or Rust toolchain setup actions.
 - Release jobs must verify exact release tool versions after installing from committed artifacts.
+- Release workflows must not expose `workflow_dispatch`; releases are created only from `Cargo.toml` version bumps merged to `main`.
 - All direct Cargo dependencies in `Cargo.toml` must use exact versions such as `=1.2.3`.
 - `Cargo.lock` is committed and treated as source of truth.
 - Vendored crates live in `vendor/cache` and are required for offline builds.
@@ -133,6 +134,7 @@ All scripts live in `script/` and should use `set -euo pipefail` unless there is
   - Offline validation for committed release-tool artifacts.
   - Verifies lockfile and manifest version consistency, lockfile/manifest agreement, artifact existence, SHA-256 checksums, archive path safety, standalone lockfile consistency, `cargo-zigbuild` source/lock/vendor archive state, and release workflow/install-script network guardrails.
   - Must fail if release-tool scripts contain embedded SHA-256 literals; expected upstream hashes belong in `release-tools.lock.toml`.
+  - Must fail if the release workflow exposes a manual `workflow_dispatch` trigger.
 
 - `script/verify-release-toolchain`
   - Offline verification for release builders.
@@ -187,6 +189,7 @@ If any version file changes, update docs and verify the corresponding script beh
 
 - `Cargo.toml` `version` is the release trigger.
 - Merging a version bump to `main` creates the `vX.Y.Z` release through CI.
+- The release workflow is intentionally not manually dispatchable.
 - Do not create or push release tags manually unless the workflow is intentionally being recovered.
 - Release artifacts should include binaries, completions, man pages, checksums, and attestations.
 - Release timestamps should come from `SOURCE_DATE_EPOCH`, normally the commit timestamp.
