@@ -45,7 +45,7 @@ jobs:
 
           should_release="false"
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            should_release="true"
+            echo "workflow_dispatch is for validation only; release publication requires a Cargo.toml version bump merged to main."
           else
             if git cat-file -e "${{ github.event.before }}:Cargo.toml" 2>/dev/null; then
               previous=$(git show "${{ github.event.before }}:Cargo.toml" \
@@ -64,9 +64,7 @@ jobs:
           fi
 
           if git rev-parse "$version_tag" >/dev/null 2>&1; then
-            if [[ "${{ github.event_name }}" != "workflow_dispatch" ]]; then
-              should_release="false"
-            fi
+            should_release="false"
           fi
 
           echo "version=${version}" >> "$GITHUB_OUTPUT"
