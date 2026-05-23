@@ -386,7 +386,7 @@ jobs:
           tag="$RELEASE_TAG"
           rm -rf release-download
           mkdir -p release-download
-          gh release download "$tag" --dir release-download
+          gh release download "$tag" --repo "${OWNER}/${REPO}" --dir release-download
 
           (
             cd release-download
