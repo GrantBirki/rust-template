@@ -3,6 +3,7 @@
 set -euo pipefail
 
 source script/env "$@"
+source "$DIR/script/lib/update-tools.bash"
 
 ensure_rust_toolchain
 
@@ -12,144 +13,6 @@ echo -e "Rust version: ${GREEN}${RUST_VERSION}${OFF}"
 script/validate-update-tools --ci
 require_cmd curl
 require_cmd tar
-
-sha256_file() {
-  local file="$1"
-  if command -v shasum >/dev/null 2>&1; then
-    shasum -a 256 "$file" | awk '{print $1}'
-  else
-    sha256sum "$file" | awk '{print $1}'
-  fi
-}
-
-update_tool_entry() {
-  local requested="$1"
-  awk -v requested="$requested" '
-    function value(line) {
-      sub(/^[^=]*= "/, "", line)
-      sub(/"$/, "", line)
-      return line
-    }
-    function print_entry() {
-      if (in_tool && name == requested) {
-        print name "|" binary "|" version "|" url "|" crate_sha256 "|" crate_lockfile_sha256
-      }
-    }
-    /^\[\[tools\]\]/ {
-      print_entry()
-      in_tool = 1
-      name = binary = version = url = crate_sha256 = crate_lockfile_sha256 = ""
-      next
-    }
-    /^\[/ {
-      print_entry()
-      in_tool = 0
-      next
-    }
-    in_tool && $1 == "name" { name = value($0) }
-    in_tool && $1 == "binary" { binary = value($0) }
-    in_tool && $1 == "version" { version = value($0) }
-    in_tool && $1 == "url" { url = value($0) }
-    in_tool && $1 == "crate_sha256" { crate_sha256 = value($0) }
-    in_tool && $1 == "crate_lockfile_sha256" { crate_lockfile_sha256 = value($0) }
-    END {
-      print_entry()
-    }
-  ' "$DIR/update-tools.lock.toml" | head -n1
-}
-
-validate_crate_archive_paths() {
-  local archive="$1"
-  local crate="$2"
-
-  while IFS= read -r path; do
-    case "$path" in
-      ""|/*|../*|*/../*|*/..|..)
-        die "${crate} crate contains unsafe archive path: $path"
-        ;;
-    esac
-  done < <(tar -tzf "$archive")
-}
-
-install_cargo_tool() {
-  local binary="$1"
-  local crate="$2"
-  local version_file="$3"
-  local version_override="${4:-}"
-  local expected="$version_override"
-
-  if [[ -z "$expected" ]]; then
-    expected="$(read_version_file "$version_file")"
-  fi
-
-  if [[ -z "$expected" ]]; then
-    die "$(basename "$version_file") is required to pin ${crate}"
-  fi
-
-  local installed=""
-  if command -v "$binary" >/dev/null 2>&1; then
-    installed="$("$binary" --version 2>/dev/null | awk '{print $2}')"
-  fi
-
-  if [[ "$installed" == "$expected" ]]; then
-    return
-  fi
-
-  local entry
-  entry="$(update_tool_entry "$crate")"
-  IFS='|' read -r locked_name locked_binary locked_version locked_url locked_crate_sha256 locked_crate_lockfile_sha256 <<< "$entry"
-  if [[ -z "$locked_name" || -z "$locked_binary" || -z "$locked_version" || -z "$locked_url" || -z "$locked_crate_sha256" || -z "$locked_crate_lockfile_sha256" ]]; then
-    die "update-tools.lock.toml is missing ${crate}"
-  fi
-  if [[ "$locked_binary" != "$binary" ]]; then
-    die "update-tools.lock.toml binary mismatch for ${crate}"
-  fi
-  if [[ "$locked_version" != "$expected" ]]; then
-    die "update-tools.lock.toml version mismatch for ${crate} (expected ${expected}, found ${locked_version})"
-  fi
-
-  local tool_tmp
-  local crate_file
-  local extract_dir
-  local source_dir
-  local actual_crate_sha256
-  local actual_lockfile_sha256
-  tool_tmp="$(mktemp -d "${TMPDIR:-/tmp}/rust-template-${crate}.XXXXXX")"
-  crate_file="$tool_tmp/${crate}-${expected}.crate"
-  extract_dir="$tool_tmp/source"
-  curl -fsSL "$locked_url" -o "$crate_file"
-  actual_crate_sha256="$(sha256_file "$crate_file")"
-  if [[ "$actual_crate_sha256" != "$locked_crate_sha256" ]]; then
-    rm -rf "$tool_tmp"
-    die "${crate} crate checksum mismatch"
-  fi
-
-  validate_crate_archive_paths "$crate_file" "$crate"
-  mkdir -p "$extract_dir"
-  tar -xzf "$crate_file" -C "$extract_dir"
-  source_dir="$extract_dir/${crate}-${expected}"
-  if [[ ! -f "$source_dir/Cargo.toml" ]]; then
-    rm -rf "$tool_tmp"
-    die "${crate} crate did not unpack to expected source directory"
-  fi
-  if [[ ! -f "$source_dir/Cargo.lock" ]]; then
-    rm -rf "$tool_tmp"
-    die "${crate} crate does not include Cargo.lock"
-  fi
-  actual_lockfile_sha256="$(sha256_file "$source_dir/Cargo.lock")"
-  if [[ "$actual_lockfile_sha256" != "$locked_crate_lockfile_sha256" ]]; then
-    rm -rf "$tool_tmp"
-    die "${crate} packaged Cargo.lock checksum mismatch"
-  fi
-
-  cargo install --locked --path "$source_dir" --force
-  rm -rf "$tool_tmp"
-
-  installed="$("$binary" --version 2>/dev/null | awk '{print $2}')"
-  if [[ "$installed" != "$expected" ]]; then
-    die "${crate} version mismatch (expected ${expected}, found ${installed:-unknown})"
-  fi
-}
 
 config="$DIR/.cargo/config.toml"
 backup="$DIR/.cargo/config.toml.bak"
@@ -185,7 +48,7 @@ cargo update
 if [[ -z "$VENDOR_DIR" || "$VENDOR_DIR" == "/" ]]; then
   die "invalid vendor directory: ${VENDOR_DIR:-unset}"
 fi
-tmp_vendor="$(mktemp -d "${TMPDIR:-/tmp}/rust-template-vendor.XXXXXX")"
+tmp_vendor="$(make_temp_dir rust-template-vendor)"
 cargo vendor --locked --versioned-dirs "$tmp_vendor"
 rm -rf "$VENDOR_DIR"
 mkdir -p "$VENDOR_DIR"
@@ -194,8 +57,8 @@ rmdir "$tmp_vendor"
 tmp_vendor=""
 
 # Run security checks while online. Advisory DB updates require network.
-install_cargo_tool cargo-audit cargo-audit "$DIR/.cargo-audit-version" "${CARGO_AUDIT_VERSION:-}"
-install_cargo_tool cargo-deny cargo-deny "$DIR/.cargo-deny-version" "${CARGO_DENY_VERSION:-}"
+install_locked_update_tool cargo-audit cargo-audit "$DIR/.cargo-audit-version" "${CARGO_AUDIT_VERSION:-}"
+install_locked_update_tool cargo-deny cargo-deny "$DIR/.cargo-deny-version" "${CARGO_DENY_VERSION:-}"
 
 cargo audit
 cargo deny check

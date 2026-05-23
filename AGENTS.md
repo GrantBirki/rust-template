@@ -64,12 +64,24 @@ Keep transient tool outputs close to the repo when reasonable.
 - Preserve explicit caller or CI temp roots. GitHub Actions jobs should continue using the runner-provided environment where appropriate.
 - If a future script needs a scratch directory, derive it from `TMPDIR`, `RUNNER_TEMP`, `target/`, or another ignored repo-local path instead of choosing an OS-global location by default.
 
+## Bash Maintainability
+
+Keep the Bash support layer DRY enough to audit.
+
+- New `script/*` entrypoints should source `script/env` and use shared helpers from `script/lib` instead of copying hash, TOML, archive, temp-directory, fetch, version, or lockfile parsing logic.
+- Put generic helpers in `script/lib/common.bash`; put Rust distribution, update-tool, and release-tool helpers in their domain-specific `script/lib/*.bash` files.
+- Keep top-level scripts as orchestration: argument parsing, online/offline intent, command ordering, and script-specific policy checks should stay easy to read.
+- Do not hide security-critical workflow guardrails behind opaque abstractions when the explicit pattern is easier to audit.
+- DRY refactors must preserve hermeticity, offline defaults, path-safety checks, checksum checks, exact version checks, and the intentional online-only boundaries.
+- Small script-local helpers are acceptable when generalizing them would make the script harder to understand or weaken reviewability.
+
 ## Script Contracts
 
 All scripts live in `script/` and should use `set -euo pipefail` unless there is a documented reason not to.
 
 - `script/env`
   - Shared environment and helper functions.
+  - Sources `script/lib/common.bash`; domain-specific scripts may also source focused helpers under `script/lib/`.
   - Exports offline Cargo defaults and disables rustup proxy auto-installation.
   - Outside CI, defaults `RUNNER_TEMP` and `TMPDIR` to `target/tmp` unless the caller already set them.
   - Defines `DIR`, `VENDOR_DIR`, Rust toolchain checks, vendor checks, and common `die`/`warn` helpers.

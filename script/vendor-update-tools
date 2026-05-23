@@ -3,6 +3,7 @@
 set -euo pipefail
 
 source script/env "$@"
+source "$DIR/script/lib/update-tools.bash"
 
 # This is the intentional online update-tool lock refresh path.
 unset CARGO_NET_OFFLINE
@@ -10,30 +11,8 @@ unset CARGO_NET_OFFLINE
 require_cmd curl
 require_cmd tar
 
-sha256_file() {
-  local file="$1"
-  if command -v shasum >/dev/null 2>&1; then
-    shasum -a 256 "$file" | awk '{print $1}'
-  else
-    sha256sum "$file" | awk '{print $1}'
-  fi
-}
-
-fetch() {
-  local url="$1"
-  local dest="$2"
-
-  mkdir -p "$(dirname "$dest")"
-  curl -fsSL "$url" -o "$dest"
-}
-
-tool_version() {
-  local name="$1"
-  read_version_file "$DIR/.${name}-version"
-}
-
 lockfile="$DIR/update-tools.lock.toml"
-tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/rust-template-update-tools.XXXXXX")"
+tmpdir="$(make_temp_dir rust-template-update-tools)"
 entries_file="$tmpdir/update-tools.entries"
 
 cleanup() {
@@ -47,31 +26,23 @@ add_tool() {
   local name="$1"
   local binary="$2"
   local version
-  version="$(tool_version "$name")"
+  version="$(read_version_file "$DIR/.${name}-version")"
   if [[ -z "$version" ]]; then
     die ".${name}-version is required"
   fi
 
-  local url="https://static.crates.io/crates/${name}/${name}-${version}.crate"
+  local url
+  url="$(update_tool_expected_url "$name" "$version")"
   local crate_file="$tmpdir/${name}-${version}.crate"
   local extract_dir="$tmpdir/${name}-extract"
-  local source_dir="$extract_dir/${name}-${version}"
+  local source_dir
 
   echo "fetching $url"
   fetch "$url" "$crate_file"
   local crate_sha256
   crate_sha256="$(sha256_file "$crate_file")"
 
-  rm -rf "$extract_dir"
-  mkdir -p "$extract_dir"
-  tar -xzf "$crate_file" -C "$extract_dir"
-
-  if [[ ! -f "$source_dir/Cargo.toml" ]]; then
-    die "${name} crate did not unpack to expected source directory"
-  fi
-  if [[ ! -f "$source_dir/Cargo.lock" ]]; then
-    die "${name} crate does not include Cargo.lock"
-  fi
+  source_dir="$(update_tool_extract_crate "$name" "$version" "$crate_file" "$extract_dir")"
 
   local crate_lockfile_sha256
   crate_lockfile_sha256="$(sha256_file "$source_dir/Cargo.lock")"
