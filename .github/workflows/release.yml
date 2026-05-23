@@ -148,11 +148,6 @@ jobs:
       - name: validate locks
         run: script/validate-locks --ci
 
-      - name: prepare rust
-        env:
-          PREPARE_RUST_TARGETS: "x86_64-unknown-linux-gnu,aarch64-unknown-linux-gnu"
-        run: script/prepare-rust
-
       - name: install release tools
         run: script/install-zig
 
@@ -194,11 +189,6 @@ jobs:
 
       - name: validate locks
         run: script/validate-locks --ci
-
-      - name: prepare rust
-        env:
-          PREPARE_RUST_TARGETS: "x86_64-apple-darwin,aarch64-apple-darwin"
-        run: script/prepare-rust
 
       - name: install release tools
         run: script/install-zig
