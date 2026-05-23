@@ -28,6 +28,9 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: validate locks
+        run: script/validate-locks --ci
+
       - name: determine version + tag
         id: version
         run: |
@@ -142,6 +145,14 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: validate locks
+        run: script/validate-locks --ci
+
+      - name: prepare rust
+        env:
+          PREPARE_RUST_TARGETS: "x86_64-unknown-linux-gnu,aarch64-unknown-linux-gnu"
+        run: script/prepare-rust
+
       - name: install release tools
         run: script/install-zig
 
@@ -180,6 +191,14 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+
+      - name: validate locks
+        run: script/validate-locks --ci
+
+      - name: prepare rust
+        env:
+          PREPARE_RUST_TARGETS: "x86_64-apple-darwin,aarch64-apple-darwin"
+        run: script/prepare-rust
 
       - name: install release tools
         run: script/install-zig

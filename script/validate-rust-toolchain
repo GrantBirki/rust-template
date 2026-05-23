@@ -1,0 +1,291 @@
+#! /usr/bin/env bash
+
+set -euo pipefail
+
+source script/env "$@"
+
+online=false
+case "${1:-}" in
+  --ci|--online)
+    online=true
+    ;;
+  ""|--offline)
+    ;;
+  *)
+    die "usage: script/validate-rust-toolchain [--ci|--online|--offline]"
+    ;;
+esac
+
+rust_lockfile="$DIR/rust-toolchain.lock.toml"
+
+if [[ ! -f "$rust_lockfile" ]]; then
+  die "missing Rust toolchain lockfile: $rust_lockfile"
+fi
+
+sha256_file() {
+  local file="$1"
+  if command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$file" | awk '{print $1}'
+  else
+    sha256sum "$file" | awk '{print $1}'
+  fi
+}
+
+toml_value() {
+  local file="$1"
+  local key="$2"
+  sed -n "s/^${key}[[:space:]]*=[[:space:]]*\"\([^\"]*\)\"/\\1/p" "$file" | head -n1
+}
+
+artifact_entries() {
+  local file="$1"
+  awk '
+    function value(line) {
+      sub(/^[^=]*= "/, "", line)
+      sub(/"$/, "", line)
+      return line
+    }
+    function print_entry() {
+      if (in_artifact) {
+        print kind "|" component "|" target "|" url "|" sha256
+      }
+    }
+    /^\[\[artifacts\]\]/ {
+      print_entry()
+      in_artifact = 1
+      kind = component = target = url = sha256 = ""
+      next
+    }
+    /^\[/ {
+      print_entry()
+      in_artifact = 0
+      next
+    }
+    in_artifact && $1 == "kind" { kind = value($0) }
+    in_artifact && $1 == "component" { component = value($0) }
+    in_artifact && $1 == "target" { target = value($0) }
+    in_artifact && $1 == "url" { url = value($0) }
+    in_artifact && $1 == "sha256" { sha256 = value($0) }
+    END {
+      print_entry()
+    }
+  ' "$file"
+}
+
+require_artifact() {
+  local kind="$1"
+  local component="$2"
+  local target="$3"
+
+  if ! artifact_entries "$rust_lockfile" | awk -F'|' -v kind="$kind" -v component="$component" -v target="$target" \
+    '$1 == kind && $2 == component && $3 == target { found=1 } END { exit(found ? 0 : 1) }'; then
+    die "missing Rust artifact lock entry: ${kind} ${component} ${target}"
+  fi
+}
+
+generate_artifact_entries_from_manifest() {
+  local manifest="$1"
+  local version="$2"
+  local hosts_csv="$3"
+  local targets_csv="$4"
+
+  python3 - "$manifest" "$version" "$hosts_csv" "$targets_csv" <<'PY'
+import sys
+
+manifest_path, version, hosts_csv, targets_csv = sys.argv[1:5]
+hosts = [item for item in hosts_csv.split(",") if item]
+targets = [item for item in targets_csv.split(",") if item]
+
+targets_by_package = {}
+
+with open(manifest_path, "r", encoding="utf-8") as handle:
+    current = None
+    for raw_line in handle:
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("[") and line.endswith("]"):
+            section = line.strip("[]").split(".")
+            if len(section) >= 4 and section[0] == "pkg" and section[2] == "target":
+                package_name = section[1]
+                target_name = ".".join(section[3:])
+                current = targets_by_package.setdefault(package_name, {}).setdefault(target_name, {})
+            else:
+                current = None
+            continue
+        if current is None or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip()
+        if value.startswith('"') and value.endswith('"'):
+            value = value[1:-1]
+        elif value in ("true", "false"):
+            value = value == "true"
+        current[key] = value
+
+component_packages = {
+    "rustc": ("rustc",),
+    "cargo": ("cargo",),
+    "rust-std": ("rust-std",),
+    "rustfmt": ("rustfmt", "rustfmt-preview"),
+    "clippy": ("clippy", "clippy-preview"),
+}
+
+
+def package_for(component):
+    for package_name in component_packages[component]:
+        package = targets_by_package.get(package_name)
+        if package:
+            return package
+    raise SystemExit(f"missing Rust package for component: {component}")
+
+
+def artifact(component, target):
+    package = package_for(component)
+    target_info = package.get(target)
+    if not target_info or target_info.get("available") is False:
+        raise SystemExit(f"missing Rust artifact for {component} on {target}")
+    url = target_info.get("xz_url") or target_info.get("url")
+    sha256 = target_info.get("xz_hash") or target_info.get("hash")
+    if not url or not sha256:
+        raise SystemExit(f"missing URL/checksum for {component} on {target}")
+    filename = url.rsplit("/", 1)[-1]
+    if not filename.endswith(".tar.xz"):
+        raise SystemExit(f"unexpected Rust artifact extension for {component} on {target}: {filename}")
+    return url, sha256
+
+
+for host in hosts:
+    for component in ("rustc", "cargo", "rustfmt", "clippy"):
+        url, sha256 = artifact(component, host)
+        print("|".join(("host", component, host, url, sha256)))
+
+for target in targets:
+    url, sha256 = artifact("rust-std", target)
+    print("|".join(("target", "rust-std", target, url, sha256)))
+PY
+}
+
+require_cmd_for_online() {
+  require_cmd curl
+  require_cmd python3
+}
+
+expected_version="$(rust_toolchain_version)"
+rust_version_file="$(read_version_file "$DIR/.rust-version")"
+cargo_rust_version="$(sed -n 's/^rust-version[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' "$DIR/Cargo.toml" | head -n1)"
+lock_version="$(toml_value "$rust_lockfile" "version")"
+lock_manifest_url="$(toml_value "$rust_lockfile" "manifest_url")"
+lock_manifest_sha="$(toml_value "$rust_lockfile" "manifest_sha256")"
+
+if [[ -z "$expected_version" ]]; then
+  die "missing channel in rust-toolchain.toml"
+fi
+
+if [[ "$rust_version_file" != "$expected_version" ]]; then
+  die ".rust-version mismatch (expected ${expected_version}, found ${rust_version_file:-missing})"
+fi
+
+if [[ "$cargo_rust_version" != "$expected_version" ]]; then
+  die "Cargo.toml rust-version mismatch (expected ${expected_version}, found ${cargo_rust_version:-missing})"
+fi
+
+if [[ "$lock_version" != "$expected_version" ]]; then
+  die "rust-toolchain.lock.toml version mismatch (expected ${expected_version}, found ${lock_version:-missing})"
+fi
+
+expected_manifest_url="https://static.rust-lang.org/dist/channel-rust-${expected_version}.toml"
+if [[ "$lock_manifest_url" != "$expected_manifest_url" ]]; then
+  die "Rust manifest URL mismatch (expected ${expected_manifest_url}, found ${lock_manifest_url:-missing})"
+fi
+
+if ! [[ "$lock_manifest_sha" =~ ^[0-9a-f]{64}$ ]]; then
+  die "Rust manifest checksum is missing or invalid"
+fi
+
+if grep -qE '^[[:space:]]*path[[:space:]]*=' "$rust_lockfile"; then
+  die "rust-toolchain.lock.toml must not reference local Rust artifact paths"
+fi
+
+expected_hosts=(
+  "x86_64-unknown-linux-gnu"
+  "aarch64-unknown-linux-gnu"
+  "x86_64-apple-darwin"
+  "aarch64-apple-darwin"
+)
+expected_targets=(
+  "x86_64-unknown-linux-gnu"
+  "aarch64-unknown-linux-gnu"
+  "x86_64-apple-darwin"
+  "aarch64-apple-darwin"
+)
+host_components=("rustc" "cargo" "rustfmt" "clippy")
+
+for host in "${expected_hosts[@]}"; do
+  for component in "${host_components[@]}"; do
+    require_artifact host "$component" "$host"
+  done
+done
+
+for target in "${expected_targets[@]}"; do
+  require_artifact target rust-std "$target"
+done
+
+artifact_count=0
+while IFS='|' read -r kind component target url sha256; do
+  artifact_count=$((artifact_count + 1))
+  if [[ -z "$kind" || -z "$component" || -z "$target" || -z "$url" || -z "$sha256" ]]; then
+    die "invalid Rust artifact lock entry"
+  fi
+
+  case "$kind" in
+    host|target) ;;
+    *) die "invalid Rust artifact kind: $kind" ;;
+  esac
+
+  case "$url" in
+    https://static.rust-lang.org/dist/*.tar.xz) ;;
+    *) die "unexpected Rust artifact URL: $url" ;;
+  esac
+
+  if ! [[ "$sha256" =~ ^[0-9a-f]{64}$ ]]; then
+    die "invalid Rust artifact checksum for ${component} ${target}"
+  fi
+done < <(artifact_entries "$rust_lockfile")
+
+if [[ "$artifact_count" -ne 20 ]]; then
+  die "expected 20 Rust artifact lock entries, found $artifact_count"
+fi
+
+if [[ "$online" == "true" ]]; then
+  require_cmd_for_online
+  tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/rust-template-rust-validate.XXXXXX")"
+  cleanup() {
+    rm -rf "$tmpdir"
+  }
+  trap cleanup EXIT
+
+  manifest_file="$tmpdir/channel-rust-${expected_version}.toml"
+  manifest_sha_file="$tmpdir/channel-rust-${expected_version}.toml.sha256"
+
+  curl -fsSL "$lock_manifest_url" -o "$manifest_file"
+  curl -fsSL "${lock_manifest_url}.sha256" -o "$manifest_sha_file"
+
+  upstream_manifest_sha="$(awk '{print $1}' "$manifest_sha_file")"
+  actual_manifest_sha="$(sha256_file "$manifest_file")"
+  if [[ -z "$upstream_manifest_sha" || "$actual_manifest_sha" != "$upstream_manifest_sha" ]]; then
+    die "Rust channel manifest checksum mismatch against upstream .sha256"
+  fi
+  if [[ "$actual_manifest_sha" != "$lock_manifest_sha" ]]; then
+    die "Rust channel manifest checksum mismatch against rust-toolchain.lock.toml"
+  fi
+
+  hosts_csv="$(IFS=,; echo "${expected_hosts[*]}")"
+  targets_csv="$(IFS=,; echo "${expected_targets[*]}")"
+  if ! diff -u <(artifact_entries "$rust_lockfile" | sort) <(generate_artifact_entries_from_manifest "$manifest_file" "$expected_version" "$hosts_csv" "$targets_csv" | sort); then
+    die "Rust artifact locks differ from upstream channel manifest"
+  fi
+fi
+
+echo -e "${GREEN}Rust toolchain lock verified${OFF}"
