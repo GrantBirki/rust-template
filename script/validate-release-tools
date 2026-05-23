@@ -196,6 +196,7 @@ if grep -nE "^[[:space:]]*['\"]?workflow_dispatch['\"]?[[:space:]]*:" "$DIR/.git
   die ".github/workflows/release.yml must not expose workflow_dispatch"
 fi
 
+require_pattern "$DIR/.github/workflows/release.yml" 'gh release download "\$tag" --repo' "release verify job must download release assets with an explicit repository"
 require_pattern "$DIR/.github/workflows/build.yml" 'script/prepare-rust' "build workflow must prepare the pinned Rust toolchain explicitly before offline release smoke validation"
 require_pattern "$DIR/.github/workflows/build.yml" 'script/install-zig' "build workflow must exercise vendored release-tool installation"
 require_pattern "$DIR/.github/workflows/build.yml" 'script/verify-release-toolchain' "build workflow must verify the release toolchain"
