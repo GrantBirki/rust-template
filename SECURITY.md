@@ -12,7 +12,7 @@ This repository is a template. Security fixes are applied to the latest `main` b
 - Routine repo scripts must not implicitly download third-party tools; hosted validation runs checksum-gated Rust preparation with `script/prepare-rust` before entering the offline script surface.
 - Cargo dependency updates must use `script/update`.
 - Dependency update changes must include any required `Cargo.lock` and `vendor/cache` changes.
-- Rust toolchain updates must use `script/vendor-rust` and commit `rust-toolchain.lock.toml` changes.
+- Rust toolchain updates must use `script/vendor-rust` and commit `.cargo/tooling/rust-toolchain.lock.toml` changes.
 - Update-tool lock refreshes for `cargo-audit` and `cargo-deny` must use `script/vendor-update-tools`.
 - Release-tool updates must use `script/vendor-release-tools` and commit `vendor/release-tools` changes.
 
@@ -31,13 +31,13 @@ GitHub-hosted runners are not fully air-gapped infrastructure. Hosted lint, test
 
 ## Tooling
 
-Rust tooling is checksum-locked in `rust-toolchain.lock.toml`:
+Rust tooling is checksum-locked in `.cargo/tooling/rust-toolchain.lock.toml`:
 
 - Rust distribution URLs and SHA-256s for `rustc`, `cargo`, `rustfmt`, `clippy`, and configured Rust target standard libraries are committed.
 - `script/prepare-rust` verifies the lock against the official Rust channel metadata before installing with `rustup`.
 - `script/vendor-rust` is the only normal Rust toolchain lock refresh path.
 
-Online update tooling is checksum-locked in `update-tools.lock.toml`:
+Online update tooling is checksum-locked in `.cargo/tooling/update-tools.lock.toml`:
 
 - `cargo-audit` and `cargo-deny` top-level crate URLs and SHA-256s are committed.
 - The packaged `Cargo.lock` inside each tool crate is checksum-verified after extraction.

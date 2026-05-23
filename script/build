@@ -249,9 +249,9 @@ for target in "${targets[@]}"; do
   if [[ "$target" != "$host_target" ]]; then
     require_cmd cargo-zigbuild
     require_cmd zig
-    assert_tool_version "zig" "$DIR/.zig-version" "$(zig version)"
-    if [[ -f "$DIR/.cargo-zigbuild-version" ]]; then
-      expected=$(head -n1 "$DIR/.cargo-zigbuild-version" | tr -d '[:space:]')
+    assert_tool_version "zig" "$ZIG_VERSION_FILE" "$(zig version)"
+    if [[ -f "$CARGO_ZIGBUILD_VERSION_FILE" ]]; then
+      expected=$(head -n1 "$CARGO_ZIGBUILD_VERSION_FILE" | tr -d '[:space:]')
       installed_output=$(cargo-zigbuild --version 2>/dev/null || true)
       installed="${installed_output#cargo-zigbuild }"
       installed="${installed%% *}"

@@ -40,9 +40,9 @@ Outside CI, shared script setup defaults `RUNNER_TEMP` and `TMPDIR` to the ignor
 
 GitHub-hosted `lint`, `test`, PR `build`, and release build jobs run `script/validate-locks --ci`, then `script/prepare-rust`, then enter the normal offline script surface. Hosted runners are not fully air-gapped infrastructure. Checkout, action loading, Rust preparation, artifact upload, release publication, and attestation verification still use networked platform services.
 
-Release build jobs install Zig and `cargo-zigbuild` from committed artifacts under `vendor/release-tools`. Zig is kept as upstream `.tar.xz` archives. `cargo-zigbuild` source and vendored dependencies are kept as deterministic `.tar.gz` archives that CI verifies and expands under `${RUNNER_TEMP}`. Those artifacts are refreshed only by `script/vendor-release-tools`, which is intentionally online-only. Upstream release-tool URLs and checksums are locked in `release-tools.lock.toml`; the generated committed-artifact inventory lives in `vendor/release-tools/manifest.toml`.
+Release build jobs install Zig and `cargo-zigbuild` from committed artifacts under `vendor/release-tools`. Zig is kept as upstream `.tar.xz` archives. `cargo-zigbuild` source and vendored dependencies are kept as deterministic `.tar.gz` archives that CI verifies and expands under `${RUNNER_TEMP}`. Those artifacts are refreshed only by `script/vendor-release-tools`, which is intentionally online-only. Upstream release-tool URLs and checksums are locked in `.cargo/tooling/release-tools.lock.toml`; the generated committed-artifact inventory lives in `vendor/release-tools/manifest.toml`.
 
-Rust toolchain metadata is refreshed only by `script/vendor-rust`, which is intentionally online-only. Upstream Rust distribution inputs and checksums are locked in `rust-toolchain.lock.toml`; Rust distribution tarballs are not committed.
+Rust toolchain metadata is refreshed only by `script/vendor-rust`, which is intentionally online-only. Upstream Rust distribution inputs and checksums are locked in `.cargo/tooling/rust-toolchain.lock.toml`; Rust distribution tarballs are not committed.
 
 The `build` workflow is the PR-based release smoke test. It validates locks, prepares checksum-locked Rust, installs the vendored release tools, verifies them, then runs `script/build --release` so PRs exercise most of the release build path before a merge to `main` can publish a release.
 
@@ -103,7 +103,7 @@ script/update
 ```
 
 This refreshes `Cargo.lock` and regenerates `vendor/cache`. All other scripts are offline-by-default.
-It also runs pinned `cargo-audit` and `cargo-deny` checks. Tool versions are pinned in `.cargo-audit-version` and `.cargo-deny-version`, and their top-level crate hashes plus packaged `Cargo.lock` hashes are locked in `update-tools.lock.toml`.
+It also runs pinned `cargo-audit` and `cargo-deny` checks. Tool versions are pinned in `.cargo/tooling/cargo-audit-version` and `.cargo/tooling/cargo-deny-version`, and their top-level crate hashes plus packaged `Cargo.lock` hashes are locked in `.cargo/tooling/update-tools.lock.toml`.
 
 Cargo Dependabot updates are intentionally disabled because dependency changes must include the lockfile and vendored crates. Use `script/update` for Cargo dependency refreshes.
 
@@ -113,7 +113,7 @@ Rust toolchain updates are separate from application dependency updates:
 script/vendor-rust
 ```
 
-This refreshes `rust-toolchain.lock.toml` from the official Rust channel manifest after verifying the manifest checksum. Review Rust toolchain updates by checking the Rust version files, upstream distribution URLs, checksums, and validation scripts.
+This refreshes `.cargo/tooling/rust-toolchain.lock.toml` from the official Rust channel manifest after verifying the manifest checksum. Review Rust toolchain updates by checking the Rust version files, upstream distribution URLs, checksums, and validation scripts.
 
 Update-tool lock refreshes are separate from application dependency updates:
 
@@ -121,7 +121,7 @@ Update-tool lock refreshes are separate from application dependency updates:
 script/vendor-update-tools
 ```
 
-This refreshes `update-tools.lock.toml` for `cargo-audit` and `cargo-deny`. Review update-tool changes by checking version pins, crates.io URLs, crate SHA-256s, and the packaged `Cargo.lock` SHA-256s extracted from each crates.io package.
+This refreshes `.cargo/tooling/update-tools.lock.toml` for `cargo-audit` and `cargo-deny`. Review update-tool changes by checking version pins, crates.io URLs, crate SHA-256s, and the packaged `Cargo.lock` SHA-256s extracted from each crates.io package.
 
 Release-tool updates are separate from application dependency updates:
 
@@ -129,7 +129,7 @@ Release-tool updates are separate from application dependency updates:
 script/vendor-release-tools
 ```
 
-This refreshes committed Zig tarballs, the `cargo-zigbuild` crate, deterministic `cargo-zigbuild` source/vendor archives, the standalone reviewable `cargo-zigbuild` lockfile, and `vendor/release-tools/manifest.toml`. Review release-tool updates by checking version pins, upstream URLs, `release-tools.lock.toml`, generated manifest changes, lockfile changes, and the vendoring scripts rather than treating GitHub's expanded archive diff as first-party code. Do not mix release-tool vendoring with normal application dependency updates.
+This refreshes committed Zig tarballs, the `cargo-zigbuild` crate, deterministic `cargo-zigbuild` source/vendor archives, the standalone reviewable `cargo-zigbuild` lockfile, and `vendor/release-tools/manifest.toml`. Review release-tool updates by checking version pins, upstream URLs, `.cargo/tooling/release-tools.lock.toml`, generated manifest changes, lockfile changes, and the vendoring scripts rather than treating GitHub's expanded archive diff as first-party code. Do not mix release-tool vendoring with normal application dependency updates.
 
 ## Coverage
 

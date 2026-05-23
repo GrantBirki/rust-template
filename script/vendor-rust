@@ -44,7 +44,8 @@ rust_dist_generate_artifact_entries_from_manifest \
   "$(rust_dist_csv "${RUST_DIST_HOSTS[@]}")" \
   "$(rust_dist_csv "${RUST_DIST_TARGETS[@]}")" > "$artifacts_file"
 
-rust_dist_write_lockfile "$DIR/rust-toolchain.lock.toml" "$rust_version" "$manifest_url" "$manifest_sha256" "$artifacts_file"
+mkdir -p "$TOOLING_DIR"
+rust_dist_write_lockfile "$RUST_TOOLCHAIN_LOCK" "$rust_version" "$manifest_url" "$manifest_sha256" "$artifacts_file"
 
 script/validate-rust-toolchain --ci
-echo -e "${GREEN}Rust distribution lock refreshed:${OFF} rust-toolchain.lock.toml"
+echo -e "${GREEN}Rust distribution lock refreshed:${OFF} ${RUST_TOOLCHAIN_LOCK#$DIR/}"

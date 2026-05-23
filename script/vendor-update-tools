@@ -11,7 +11,8 @@ unset CARGO_NET_OFFLINE
 require_cmd curl
 require_cmd tar
 
-lockfile="$DIR/update-tools.lock.toml"
+lockfile="$UPDATE_TOOLS_LOCK"
+mkdir -p "$TOOLING_DIR"
 tmpdir="$(make_temp_dir rust-template-update-tools)"
 entries_file="$tmpdir/update-tools.entries"
 
@@ -26,9 +27,10 @@ add_tool() {
   local name="$1"
   local binary="$2"
   local version
-  version="$(read_version_file "$DIR/.${name}-version")"
+  local version_file="$TOOLING_DIR/${name}-version"
+  version="$(read_version_file "$version_file")"
   if [[ -z "$version" ]]; then
-    die ".${name}-version is required"
+    die "${version_file#$DIR/} is required"
   fi
 
   local url
@@ -79,4 +81,4 @@ add_tool cargo-deny cargo-deny
 } > "$lockfile"
 
 script/validate-update-tools --ci
-echo -e "${GREEN}update-tool locks refreshed:${OFF} update-tools.lock.toml"
+echo -e "${GREEN}update-tool locks refreshed:${OFF} ${UPDATE_TOOLS_LOCK#$DIR/}"

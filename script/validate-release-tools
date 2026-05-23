@@ -7,7 +7,7 @@ source "$DIR/script/lib/release-tools.bash"
 
 release_tools_dir="$DIR/vendor/release-tools"
 manifest="$release_tools_dir/manifest.toml"
-lockfile="$DIR/release-tools.lock.toml"
+lockfile="$RELEASE_TOOLS_LOCK"
 
 if [[ ! -f "$lockfile" ]]; then
   die "missing release-tool lockfile: $lockfile"
@@ -17,19 +17,19 @@ if [[ ! -f "$manifest" ]]; then
   die "missing release-tool manifest: $manifest"
 fi
 
-zig_version="$(read_version_file "$DIR/.zig-version")"
-cargo_zigbuild_version="$(read_version_file "$DIR/.cargo-zigbuild-version")"
+zig_version="$(read_version_file "$ZIG_VERSION_FILE")"
+cargo_zigbuild_version="$(read_version_file "$CARGO_ZIGBUILD_VERSION_FILE")"
 lock_zig_version="$(toml_value "$lockfile" "zig_version")"
 lock_zigbuild_version="$(toml_value "$lockfile" "cargo_zigbuild_version")"
 manifest_zig_version="$(toml_value "$manifest" "zig_version")"
 manifest_zigbuild_version="$(toml_value "$manifest" "cargo_zigbuild_version")"
 
 if [[ "$lock_zig_version" != "$zig_version" ]]; then
-  die "release-tools.lock.toml Zig version mismatch (expected ${zig_version}, found ${lock_zig_version:-missing})"
+  die "${RELEASE_TOOLS_LOCK#$DIR/} Zig version mismatch (expected ${zig_version}, found ${lock_zig_version:-missing})"
 fi
 
 if [[ "$lock_zigbuild_version" != "$cargo_zigbuild_version" ]]; then
-  die "release-tools.lock.toml cargo-zigbuild version mismatch (expected ${cargo_zigbuild_version}, found ${lock_zigbuild_version:-missing})"
+  die "${RELEASE_TOOLS_LOCK#$DIR/} cargo-zigbuild version mismatch (expected ${cargo_zigbuild_version}, found ${lock_zigbuild_version:-missing})"
 fi
 
 if [[ "$manifest_zig_version" != "$zig_version" ]]; then
@@ -76,12 +76,12 @@ if [[ "$lock_cargo_zigbuild_entry" != "$manifest_cargo_zigbuild_entry" ]]; then
 fi
 IFS='|' read -r lock_cargo_entry_version lock_cargo_entry_url lock_cargo_entry_path lock_cargo_entry_sha256 <<< "$lock_cargo_zigbuild_entry"
 if [[ -z "$lock_cargo_entry_version" || -z "$lock_cargo_entry_url" || -z "$lock_cargo_entry_path" || -z "$lock_cargo_entry_sha256" ]]; then
-  die "release-tools.lock.toml is missing cargo-zigbuild upstream fields"
+  die "${RELEASE_TOOLS_LOCK#$DIR/} is missing cargo-zigbuild upstream fields"
 fi
 if [[ "$lock_cargo_entry_version" != "$cargo_zigbuild_version" ]]; then
-  die "release-tools.lock.toml cargo-zigbuild entry version mismatch (expected ${cargo_zigbuild_version}, found ${lock_cargo_entry_version})"
+  die "${RELEASE_TOOLS_LOCK#$DIR/} cargo-zigbuild entry version mismatch (expected ${cargo_zigbuild_version}, found ${lock_cargo_entry_version})"
 fi
-reject_unsafe_relative_path "$lock_cargo_entry_path" "release-tools.lock.toml cargo-zigbuild crate path"
+reject_unsafe_relative_path "$lock_cargo_entry_path" "${RELEASE_TOOLS_LOCK#$DIR/} cargo-zigbuild crate path"
 
 cargo_crate_path="$(toml_value "$manifest" "crate_path")"
 cargo_crate_sha256="$(toml_value "$manifest" "crate_sha256")"
@@ -207,7 +207,7 @@ fi
 
 for script in "$DIR/script/vendor-release-tools" "$DIR/script/install-zig" "$DIR/script/validate-release-tools"; do
   if grep -nE '[[:xdigit:]]{64}' "$script"; then
-    die "${script#$DIR/} must not contain embedded SHA-256 literals; use release-tools.lock.toml or the generated manifest"
+    die "${script#$DIR/} must not contain embedded SHA-256 literals; use ${RELEASE_TOOLS_LOCK#$DIR/} or the generated manifest"
   fi
 done
 

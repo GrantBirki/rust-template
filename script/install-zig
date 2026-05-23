@@ -19,8 +19,8 @@ require_cmd tar
 
 IFS='|' read -r zig_os zig_arch platform < <(release_tools_host_platform)
 
-zig_version="$(read_version_file "$DIR/.zig-version")"
-cargo_zigbuild_version="$(read_version_file "$DIR/.cargo-zigbuild-version")"
+zig_version="$(read_version_file "$ZIG_VERSION_FILE")"
+cargo_zigbuild_version="$(read_version_file "$CARGO_ZIGBUILD_VERSION_FILE")"
 
 manifest_zig_version="$(toml_value "$manifest" "zig_version")"
 manifest_zigbuild_version="$(toml_value "$manifest" "cargo_zigbuild_version")"

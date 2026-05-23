@@ -25,6 +25,24 @@ export DIR
 
 source "$DIR/script/lib/common.bash"
 
+TOOLING_DIR="$DIR/.cargo/tooling"
+RUST_TOOLCHAIN_LOCK="$TOOLING_DIR/rust-toolchain.lock.toml"
+UPDATE_TOOLS_LOCK="$TOOLING_DIR/update-tools.lock.toml"
+RELEASE_TOOLS_LOCK="$TOOLING_DIR/release-tools.lock.toml"
+ZIG_VERSION_FILE="$TOOLING_DIR/zig-version"
+CARGO_ZIGBUILD_VERSION_FILE="$TOOLING_DIR/cargo-zigbuild-version"
+CARGO_AUDIT_VERSION_FILE="$TOOLING_DIR/cargo-audit-version"
+CARGO_DENY_VERSION_FILE="$TOOLING_DIR/cargo-deny-version"
+
+export TOOLING_DIR
+export RUST_TOOLCHAIN_LOCK
+export UPDATE_TOOLS_LOCK
+export RELEASE_TOOLS_LOCK
+export ZIG_VERSION_FILE
+export CARGO_ZIGBUILD_VERSION_FILE
+export CARGO_AUDIT_VERSION_FILE
+export CARGO_DENY_VERSION_FILE
+
 read_version_file() {
   local file="$1"
   if [[ -f "$file" ]]; then
@@ -109,14 +127,14 @@ export PLATFORM
 export VERSION
 export ARCH
 
-if [[ -f "$DIR/.zig-version" ]]; then
-  ZIG_VERSION="$(read_version_file "$DIR/.zig-version")"
+if [[ -f "$ZIG_VERSION_FILE" ]]; then
+  ZIG_VERSION="$(read_version_file "$ZIG_VERSION_FILE")"
 else
   ZIG_VERSION=""
 fi
 
-if [[ -f "$DIR/.cargo-zigbuild-version" ]]; then
-  CARGO_ZIGBUILD_VERSION="$(read_version_file "$DIR/.cargo-zigbuild-version")"
+if [[ -f "$CARGO_ZIGBUILD_VERSION_FILE" ]]; then
+  CARGO_ZIGBUILD_VERSION="$(read_version_file "$CARGO_ZIGBUILD_VERSION_FILE")"
 else
   CARGO_ZIGBUILD_VERSION=""
 fi

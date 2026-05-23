@@ -19,32 +19,32 @@ release_tools_dir="$DIR/vendor/release-tools"
 zig_dir="$release_tools_dir/zig"
 cargo_dir="$release_tools_dir/cargo-zigbuild"
 manifest="$release_tools_dir/manifest.toml"
-lockfile="$DIR/release-tools.lock.toml"
+lockfile="$RELEASE_TOOLS_LOCK"
 
 if [[ ! -f "$lockfile" ]]; then
   die "missing release-tool lockfile: $lockfile"
 fi
 
-zig_version="$(read_version_file "$DIR/.zig-version")"
-cargo_zigbuild_version="$(read_version_file "$DIR/.cargo-zigbuild-version")"
+zig_version="$(read_version_file "$ZIG_VERSION_FILE")"
+cargo_zigbuild_version="$(read_version_file "$CARGO_ZIGBUILD_VERSION_FILE")"
 
 if [[ -z "$zig_version" ]]; then
-  die ".zig-version is required"
+  die "${ZIG_VERSION_FILE#$DIR/} is required"
 fi
 
 if [[ -z "$cargo_zigbuild_version" ]]; then
-  die ".cargo-zigbuild-version is required"
+  die "${CARGO_ZIGBUILD_VERSION_FILE#$DIR/} is required"
 fi
 
 locked_zig_version="$(toml_value "$lockfile" "zig_version")"
 locked_zigbuild_version="$(toml_value "$lockfile" "cargo_zigbuild_version")"
 
 if [[ "$locked_zig_version" != "$zig_version" ]]; then
-  die "release-tools.lock.toml Zig version mismatch (expected ${zig_version}, found ${locked_zig_version:-missing})"
+  die "${RELEASE_TOOLS_LOCK#$DIR/} Zig version mismatch (expected ${zig_version}, found ${locked_zig_version:-missing})"
 fi
 
 if [[ "$locked_zigbuild_version" != "$cargo_zigbuild_version" ]]; then
-  die "release-tools.lock.toml cargo-zigbuild version mismatch (expected ${cargo_zigbuild_version}, found ${locked_zigbuild_version:-missing})"
+  die "${RELEASE_TOOLS_LOCK#$DIR/} cargo-zigbuild version mismatch (expected ${cargo_zigbuild_version}, found ${locked_zigbuild_version:-missing})"
 fi
 
 tmpdir="$(make_temp_dir rust-template-release-tools)"
@@ -54,7 +54,7 @@ cleanup() {
 trap cleanup EXIT
 
 rm -rf "$release_tools_dir"
-mkdir -p "$zig_dir" "$cargo_dir"
+mkdir -p "$TOOLING_DIR" "$zig_dir" "$cargo_dir"
 
 zig_manifest_file="$tmpdir/zig-manifest.toml"
 : > "$zig_manifest_file"
@@ -71,7 +71,7 @@ add_zig_artifact() {
   local tmp_artifact="$tmpdir/$filename"
 
   if [[ -z "$platform" || -z "$arch" || -z "$os" || -z "$version" || -z "$url" || -z "$dest" || -z "$expected_sha256" ]]; then
-    die "invalid Zig entry in release-tools.lock.toml"
+    die "invalid Zig entry in ${RELEASE_TOOLS_LOCK#$DIR/}"
   fi
 
   if [[ "$version" != "$zig_version" ]]; then
@@ -114,13 +114,13 @@ while IFS='|' read -r platform arch os version url dest expected_sha256; do
 done < <(release_tools_zig_entries "$lockfile")
 
 if [[ "$zig_count" -ne 4 ]]; then
-  die "expected 4 Zig entries in release-tools.lock.toml, found $zig_count"
+  die "expected 4 Zig entries in ${RELEASE_TOOLS_LOCK#$DIR/}, found $zig_count"
 fi
 
 IFS='|' read -r locked_cargo_version cargo_url cargo_dest expected_cargo_crate_sha256 < <(release_tools_cargo_zigbuild_entry "$lockfile")
 
 if [[ -z "$locked_cargo_version" || -z "$cargo_url" || -z "$cargo_dest" || -z "$expected_cargo_crate_sha256" ]]; then
-  die "release-tools.lock.toml is missing cargo-zigbuild fields"
+  die "${RELEASE_TOOLS_LOCK#$DIR/} is missing cargo-zigbuild fields"
 fi
 
 if [[ "$locked_cargo_version" != "$cargo_zigbuild_version" ]]; then
