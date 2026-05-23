@@ -163,7 +163,7 @@ Release build jobs use checksum-gated Rust preparation and committed release-too
 Since the releases are signed using GitHub Artifact Attestations, you can verify the authenticity of the release artifacts using the GitHub CLI.
 
 ```console
-gh release download vX.Y.Z --dir release-download
+gh release download vX.Y.Z --repo GrantBirki/rust-template --dir release-download
 cd release-download
 shasum -a 256 -c checksums.txt
 gh attestation verify rust-template_vX.Y.Z_darwin-universal.tar.gz \
