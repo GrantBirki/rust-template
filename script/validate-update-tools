@@ -1,0 +1,159 @@
+#! /usr/bin/env bash
+
+set -euo pipefail
+
+source script/env "$@"
+
+online=false
+case "${1:-}" in
+  --ci|--online)
+    online=true
+    ;;
+  ""|--offline)
+    ;;
+  *)
+    die "usage: script/validate-update-tools [--ci|--online|--offline]"
+    ;;
+esac
+
+lockfile="$DIR/update-tools.lock.toml"
+if [[ ! -f "$lockfile" ]]; then
+  die "missing update-tool lockfile: $lockfile"
+fi
+
+sha256_file() {
+  local file="$1"
+  if command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$file" | awk '{print $1}'
+  else
+    sha256sum "$file" | awk '{print $1}'
+  fi
+}
+
+tool_entries() {
+  awk '
+    function value(line) {
+      sub(/^[^=]*= "/, "", line)
+      sub(/"$/, "", line)
+      return line
+    }
+    function print_entry() {
+      if (in_tool) {
+        print name "|" binary "|" version "|" url "|" crate_sha256 "|" crate_lockfile_sha256
+      }
+    }
+    /^\[\[tools\]\]/ {
+      print_entry()
+      in_tool = 1
+      name = binary = version = url = crate_sha256 = crate_lockfile_sha256 = ""
+      next
+    }
+    /^\[/ {
+      print_entry()
+      in_tool = 0
+      next
+    }
+    in_tool && $1 == "name" { name = value($0) }
+    in_tool && $1 == "binary" { binary = value($0) }
+    in_tool && $1 == "version" { version = value($0) }
+    in_tool && $1 == "url" { url = value($0) }
+    in_tool && $1 == "crate_sha256" { crate_sha256 = value($0) }
+    in_tool && $1 == "crate_lockfile_sha256" { crate_lockfile_sha256 = value($0) }
+    END {
+      print_entry()
+    }
+  ' "$lockfile"
+}
+
+require_tool() {
+  local name="$1"
+  if ! tool_entries | awk -F'|' -v name="$name" '$1 == name { found=1 } END { exit(found ? 0 : 1) }'; then
+    die "missing update-tool lock entry: $name"
+  fi
+}
+
+tmpdir=""
+if [[ "$online" == "true" ]]; then
+  require_cmd curl
+  require_cmd tar
+  tmpdir="$(mktemp -d "${TMPDIR:-/tmp}/rust-template-update-tools.XXXXXX")"
+  cleanup() {
+    rm -rf "$tmpdir"
+  }
+  trap cleanup EXIT
+fi
+
+validate_crate_archive_paths() {
+  local archive="$1"
+  local name="$2"
+
+  while IFS= read -r path; do
+    case "$path" in
+      ""|/*|../*|*/../*|*/..|..)
+        die "${name} crate contains unsafe archive path: $path"
+        ;;
+    esac
+  done < <(tar -tzf "$archive")
+}
+
+require_tool cargo-audit
+require_tool cargo-deny
+
+tool_count=0
+while IFS='|' read -r name binary version url crate_sha256 crate_lockfile_sha256; do
+  tool_count=$((tool_count + 1))
+  if [[ -z "$name" || -z "$binary" || -z "$version" || -z "$url" || -z "$crate_sha256" || -z "$crate_lockfile_sha256" ]]; then
+    die "invalid update-tool lock entry"
+  fi
+
+  case "$name" in
+    cargo-audit|cargo-deny) ;;
+    *) die "unexpected update-tool lock entry: $name" ;;
+  esac
+
+  version_file="$DIR/.${name}-version"
+  expected_version="$(read_version_file "$version_file")"
+  if [[ "$version" != "$expected_version" ]]; then
+    die "${name} version mismatch (expected ${expected_version:-missing}, found ${version})"
+  fi
+
+  expected_url="https://static.crates.io/crates/${name}/${name}-${version}.crate"
+  if [[ "$url" != "$expected_url" ]]; then
+    die "${name} crate URL mismatch (expected ${expected_url}, found ${url})"
+  fi
+
+  if ! [[ "$crate_sha256" =~ ^[0-9a-f]{64}$ ]]; then
+    die "${name} crate checksum is missing or invalid"
+  fi
+  if ! [[ "$crate_lockfile_sha256" =~ ^[0-9a-f]{64}$ ]]; then
+    die "${name} packaged Cargo.lock checksum is missing or invalid"
+  fi
+
+  if [[ "$online" == "true" ]]; then
+    crate_file="$tmpdir/${name}-${version}.crate"
+    extract_dir="$tmpdir/${name}-extract"
+    source_dir="$extract_dir/${name}-${version}"
+    curl -fsSL "$url" -o "$crate_file"
+    actual_crate_sha256="$(sha256_file "$crate_file")"
+    if [[ "$actual_crate_sha256" != "$crate_sha256" ]]; then
+      die "${name} crate checksum mismatch"
+    fi
+    validate_crate_archive_paths "$crate_file" "$name"
+    rm -rf "$extract_dir"
+    mkdir -p "$extract_dir"
+    tar -xzf "$crate_file" -C "$extract_dir"
+    if [[ ! -f "$source_dir/Cargo.lock" ]]; then
+      die "${name} crate does not include Cargo.lock"
+    fi
+    actual_lockfile_sha256="$(sha256_file "$source_dir/Cargo.lock")"
+    if [[ "$actual_lockfile_sha256" != "$crate_lockfile_sha256" ]]; then
+      die "${name} packaged Cargo.lock checksum mismatch"
+    fi
+  fi
+done < <(tool_entries)
+
+if [[ "$tool_count" -ne 2 ]]; then
+  die "expected 2 update-tool lock entries, found $tool_count"
+fi
+
+echo -e "${GREEN}update-tool locks verified${OFF}"

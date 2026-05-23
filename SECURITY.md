@@ -9,9 +9,11 @@ This repository is a template. Security fixes are applied to the latest `main` b
 - Cargo dependencies must be exact-pinned where practical.
 - `Cargo.lock` must be committed.
 - `vendor/cache` must be committed.
-- Routine repo scripts must not implicitly download third-party tools; hosted validation prepares Rust explicitly with `script/prepare-rust` before entering the offline script surface.
+- Routine repo scripts must not implicitly download third-party tools; hosted validation runs checksum-gated Rust preparation with `script/prepare-rust` before entering the offline script surface.
 - Cargo dependency updates must use `script/update`.
 - Dependency update changes must include any required `Cargo.lock` and `vendor/cache` changes.
+- Rust toolchain updates must use `script/vendor-rust` and commit `rust-toolchain.lock.toml` changes.
+- Update-tool lock refreshes for `cargo-audit` and `cargo-deny` must use `script/vendor-update-tools`.
 - Release-tool updates must use `script/vendor-release-tools` and commit `vendor/release-tools` changes.
 
 ## Offline Expectations
@@ -25,9 +27,21 @@ script/lint
 script/build
 ```
 
-GitHub-hosted runners are not fully air-gapped infrastructure. Hosted lint, test, and PR build validation may run `script/prepare-rust` first, then the repository scripts stay on the offline surface. Those offline scripts do not ask Cargo or rustup to hydrate dependencies or toolchains implicitly. Checkout, action loading, artifact transfer, release publication, and attestation verification still require GitHub platform access.
+GitHub-hosted runners are not fully air-gapped infrastructure. Hosted lint, test, PR build, and release build validation run `script/validate-locks --ci` and `script/prepare-rust` first, then the repository scripts stay on the offline surface. Those offline scripts do not ask Cargo or rustup to hydrate dependencies or toolchains implicitly. Checkout, action loading, Rust preparation, artifact transfer, release publication, and attestation verification still require network access.
 
-## Release Tooling
+## Tooling
+
+Rust tooling is checksum-locked in `rust-toolchain.lock.toml`:
+
+- Rust distribution URLs and SHA-256s for `rustc`, `cargo`, `rustfmt`, `clippy`, and configured Rust target standard libraries are committed.
+- `script/prepare-rust` verifies the lock against the official Rust channel metadata before installing with `rustup`.
+- `script/vendor-rust` is the only normal Rust toolchain lock refresh path.
+
+Online update tooling is checksum-locked in `update-tools.lock.toml`:
+
+- `cargo-audit` and `cargo-deny` top-level crate URLs and SHA-256s are committed.
+- The packaged `Cargo.lock` inside each tool crate is checksum-verified after extraction.
+- `script/vendor-update-tools` is the only normal update-tool lock refresh path.
 
 Release build tooling is vendored in `vendor/release-tools`:
 
@@ -35,8 +49,6 @@ Release build tooling is vendored in `vendor/release-tools`:
 - `cargo-zigbuild` crate, source archive, lockfile, and vendored transitive dependency archive are committed and checksum-verified before extraction.
 - `script/install-zig` installs release tools from committed artifacts only.
 - `script/vendor-release-tools` is the only online release-tool refresh path.
-
-This repository does not yet vendor the Rust toolchain or Rust target standard libraries. Hosted lint, test, and PR build validation prepare the pinned Rust toolchain explicitly with `script/prepare-rust`. Protected release-build jobs remain stricter: they do not run that preparation step and require Rust plus any requested target standard libraries to already be present or vendored in a future pass.
 
 Release publication, artifact upload/download, and attestation verification are intentionally GitHub-networked operations.
 

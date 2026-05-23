@@ -23,6 +23,33 @@ export RUST_ENV
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && cd .. && pwd )"
 export DIR
 
+read_version_file() {
+  local file="$1"
+  if [[ -f "$file" ]]; then
+    head -n1 "$file" | tr -d '[:space:]'
+  fi
+}
+
+rust_toolchain_version() {
+  sed -n 's/^channel[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' "$DIR/rust-toolchain.toml" | head -n1
+}
+
+rust_host_triple() {
+  local arch
+  local os
+
+  arch="$(uname -m || echo unknown)"
+  os="$(uname -s || echo unknown)"
+
+  case "${os}:${arch}" in
+    Linux:x86_64) echo "x86_64-unknown-linux-gnu" ;;
+    Linux:aarch64|Linux:arm64) echo "aarch64-unknown-linux-gnu" ;;
+    Darwin:x86_64) echo "x86_64-apple-darwin" ;;
+    Darwin:arm64|Darwin:aarch64) echo "aarch64-apple-darwin" ;;
+    *) echo "unknown" ;;
+  esac
+}
+
 if [[ "${CI:-}" != "true" ]]; then
   LOCAL_TMP_DIR="$DIR/target/tmp"
   mkdir -p "$LOCAL_TMP_DIR"
@@ -37,6 +64,12 @@ export REPO_NAME
 
 TARBALL_DIR="$DIR/tarballs"
 export TARBALL_DIR
+
+RUST_TOOLCHAIN_VERSION="$(rust_toolchain_version || true)"
+RUST_HOST_TRIPLE="$(rust_host_triple)"
+
+export RUST_TOOLCHAIN_VERSION
+export RUST_HOST_TRIPLE
 
 refresh_rust_version() {
   local rust_version_out=""
@@ -74,6 +107,64 @@ export PLATFORM
 export VERSION
 export ARCH
 
+if [[ -f "$DIR/.zig-version" ]]; then
+  ZIG_VERSION="$(read_version_file "$DIR/.zig-version")"
+else
+  ZIG_VERSION=""
+fi
+
+if [[ -f "$DIR/.cargo-zigbuild-version" ]]; then
+  CARGO_ZIGBUILD_VERSION="$(read_version_file "$DIR/.cargo-zigbuild-version")"
+else
+  CARGO_ZIGBUILD_VERSION=""
+fi
+
+zig_arch="$ARCH"
+case "$zig_arch" in
+  arm64) zig_arch="aarch64" ;;
+esac
+
+if [[ -n "$ZIG_VERSION" && "$PLATFORM" != "unknown" ]]; then
+  ZIG_ROOT="${RUNNER_TEMP:-/tmp}/zig-${zig_arch}-${PLATFORM}-${ZIG_VERSION}"
+  : "${ZIG_GLOBAL_CACHE_DIR:=${RUNNER_TEMP:-/tmp}/zig-cache-${ZIG_VERSION}/global}"
+  : "${ZIG_LOCAL_CACHE_DIR:=${RUNNER_TEMP:-/tmp}/zig-cache-${ZIG_VERSION}/local}"
+  mkdir -p "$ZIG_GLOBAL_CACHE_DIR" "$ZIG_LOCAL_CACHE_DIR"
+  if [[ -d "$ZIG_ROOT" ]]; then
+    case ":$PATH:" in
+      *":$ZIG_ROOT:"*) ;;
+      *) export PATH="$ZIG_ROOT:$PATH" ;;
+    esac
+    : "${CARGO_ZIGBUILD_ZIG_PATH:=$ZIG_ROOT/zig}"
+  fi
+else
+  ZIG_ROOT=""
+  ZIG_GLOBAL_CACHE_DIR="${ZIG_GLOBAL_CACHE_DIR:-}"
+  ZIG_LOCAL_CACHE_DIR="${ZIG_LOCAL_CACHE_DIR:-}"
+fi
+
+if [[ -n "$CARGO_ZIGBUILD_VERSION" ]]; then
+  CARGO_ZIGBUILD_ROOT="${RUNNER_TEMP:-/tmp}/cargo-zigbuild-${CARGO_ZIGBUILD_VERSION}"
+  : "${CARGO_ZIGBUILD_CACHE_DIR:=${RUNNER_TEMP:-/tmp}/cargo-zigbuild-cache-${CARGO_ZIGBUILD_VERSION}}"
+  if [[ -d "$CARGO_ZIGBUILD_ROOT/bin" ]]; then
+    case ":$PATH:" in
+      *":$CARGO_ZIGBUILD_ROOT/bin:"*) ;;
+      *) export PATH="$CARGO_ZIGBUILD_ROOT/bin:$PATH" ;;
+    esac
+  fi
+else
+  CARGO_ZIGBUILD_ROOT=""
+  CARGO_ZIGBUILD_CACHE_DIR="${CARGO_ZIGBUILD_CACHE_DIR:-}"
+fi
+
+export ZIG_VERSION
+export ZIG_ROOT
+export ZIG_GLOBAL_CACHE_DIR
+export ZIG_LOCAL_CACHE_DIR
+export CARGO_ZIGBUILD_ZIG_PATH
+export CARGO_ZIGBUILD_VERSION
+export CARGO_ZIGBUILD_ROOT
+export CARGO_ZIGBUILD_CACHE_DIR
+
 VENDOR_DIR="$DIR/vendor/cache"
 export VENDOR_DIR
 
@@ -96,17 +187,6 @@ require_cmd() {
   fi
 }
 
-read_version_file() {
-  local file="$1"
-  if [[ -f "$file" ]]; then
-    head -n1 "$file" | tr -d '[:space:]'
-  fi
-}
-
-rust_toolchain_version() {
-  sed -n 's/^channel[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' "$DIR/rust-toolchain.toml" | head -n1
-}
-
 ensure_rust_toolchain() {
   local expected
   expected="$(rust_toolchain_version)"
@@ -119,12 +199,18 @@ ensure_rust_toolchain() {
   if [[ "$RUST_VERSION" != "$expected" ]]; then
     die "rust toolchain mismatch (expected ${expected}, found ${RUST_VERSION}). Repo scripts do not switch Rust implicitly; run script/prepare-rust while online or provision the pinned toolchain before rerunning."
   fi
+
   if [[ -f "$DIR/.rust-version" ]]; then
     local file_version
     file_version="$(read_version_file "$DIR/.rust-version")"
     if [[ -n "$file_version" && "$file_version" != "$expected" ]]; then
       die ".rust-version mismatch (expected ${expected}, found ${file_version})"
     fi
+  fi
+  local cargo_rust_version
+  cargo_rust_version="$(sed -n 's/^rust-version[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' "$DIR/Cargo.toml" | head -n1)"
+  if [[ -n "$cargo_rust_version" && "$cargo_rust_version" != "$expected" ]]; then
+    die "Cargo.toml rust-version mismatch (expected ${expected}, found ${cargo_rust_version})"
   fi
 }
 

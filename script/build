@@ -92,6 +92,18 @@ assert_tool_version() {
   fi
 }
 
+rust_target_installed() {
+  local target="$1"
+  local sysroot
+
+  sysroot="$(rustc --print sysroot 2>/dev/null || true)"
+  if [[ -z "$sysroot" ]]; then
+    return 1
+  fi
+
+  [[ -d "$sysroot/lib/rustlib/$target/lib" ]]
+}
+
 release_mode=false
 universal_darwin=false
 dist_dir="$DIR/dist"
@@ -252,14 +264,10 @@ for target in "${targets[@]}"; do
   fi
 
   if [[ "$target" != "$host_target" ]]; then
-    if command -v rustup >/dev/null 2>&1; then
-      if ! rustup target list --installed | grep -qx "$target"; then
-        echo -e "${RED}error:${OFF} rust target not installed: ${target}" >&2
-        echo -e "${RED}hint:${OFF} provision the target before egress-blocked builds, then re-run the build" >&2
-        exit 1
-      fi
-    else
-      die "rustup is required to verify/install cross targets (${target})"
+    if ! rust_target_installed "$target"; then
+      echo -e "${RED}error:${OFF} rust target not installed: ${target}" >&2
+      echo -e "${RED}hint:${OFF} run script/prepare-rust with PREPARE_RUST_TARGETS including ${target}, then re-run the build" >&2
+      exit 1
     fi
   fi
 

@@ -315,7 +315,7 @@ if grep -nE '\bcurl\b|cargo install[[:space:]].*--version|rustup target add|setu
   die ".github/workflows/build.yml contains networked release-tool installation commands"
 fi
 
-if grep -nE '\bcurl\b|cargo install[[:space:]].*--version|rustup target add|setup-rust-toolchain|script/prepare-rust' "$DIR/.github/workflows/release.yml"; then
+if grep -nE '\bcurl\b|cargo install[[:space:]].*--version|rustup target add|setup-rust-toolchain' "$DIR/.github/workflows/release.yml"; then
   die ".github/workflows/release.yml contains networked release-tool installation commands"
 fi
 

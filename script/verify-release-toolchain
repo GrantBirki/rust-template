@@ -9,6 +9,18 @@ require_cmd cargo
 require_cmd zig
 require_cmd cargo-zigbuild
 
+rust_target_installed() {
+  local target="$1"
+  local sysroot
+
+  sysroot="$(rustc --print sysroot 2>/dev/null || true)"
+  if [[ -z "$sysroot" ]]; then
+    return 1
+  fi
+
+  [[ -d "$sysroot/lib/rustlib/$target/lib" ]]
+}
+
 expected_zig="$(read_version_file "$DIR/.zig-version")"
 if [[ -z "$expected_zig" ]]; then
   die ".zig-version is required"
@@ -32,10 +44,9 @@ if [[ "$actual_zigbuild" != "$expected_zigbuild" ]]; then
 fi
 
 if [[ -n "${VERIFY_RUST_TARGETS:-}" ]]; then
-  require_cmd rustup
   IFS=',' read -r -a targets <<< "$VERIFY_RUST_TARGETS"
   for target in "${targets[@]}"; do
-    if [[ -n "$target" ]] && ! rustup target list --installed | grep -qx "$target"; then
+    if [[ -n "$target" ]] && ! rust_target_installed "$target"; then
       die "rust target not installed: $target"
     fi
   done
