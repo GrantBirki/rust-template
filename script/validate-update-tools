@@ -17,7 +17,7 @@ case "${1:-}" in
     ;;
 esac
 
-lockfile="$DIR/update-tools.lock.toml"
+lockfile="$UPDATE_TOOLS_LOCK"
 if [[ ! -f "$lockfile" ]]; then
   die "missing update-tool lockfile: $lockfile"
 fi
@@ -48,7 +48,7 @@ while IFS='|' read -r name binary version url crate_sha256 crate_lockfile_sha256
     *) die "unexpected update-tool lock entry: $name" ;;
   esac
 
-  version_file="$DIR/.${name}-version"
+  version_file="$TOOLING_DIR/${name}-version"
   expected_version="$(read_version_file "$version_file")"
   if [[ "$version" != "$expected_version" ]]; then
     die "${name} version mismatch (expected ${expected_version:-missing}, found ${version})"

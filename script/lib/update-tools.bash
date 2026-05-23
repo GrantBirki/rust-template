@@ -1,7 +1,7 @@
 # Shared helpers for online update-path Cargo tools.
 
 update_tool_entries() {
-  local lockfile="${1:-$DIR/update-tools.lock.toml}"
+  local lockfile="${1:-$UPDATE_TOOLS_LOCK}"
   awk '
     function value(line) {
       sub(/^[^=]*= "/, "", line)
@@ -38,7 +38,7 @@ update_tool_entries() {
 
 update_tool_entry() {
   local requested="$1"
-  local lockfile="${2:-$DIR/update-tools.lock.toml}"
+  local lockfile="${2:-$UPDATE_TOOLS_LOCK}"
   update_tool_entries "$lockfile" | awk -F'|' -v requested="$requested" '$1 == requested { print; exit }'
 }
 
@@ -160,13 +160,13 @@ install_locked_update_tool() {
   local locked_name locked_binary locked_version locked_url locked_crate_sha256 locked_crate_lockfile_sha256
   IFS='|' read -r locked_name locked_binary locked_version locked_url locked_crate_sha256 locked_crate_lockfile_sha256 <<< "$entry"
   if [[ -z "$locked_name" || -z "$locked_binary" || -z "$locked_version" || -z "$locked_url" || -z "$locked_crate_sha256" || -z "$locked_crate_lockfile_sha256" ]]; then
-    die "update-tools.lock.toml is missing ${crate}"
+    die "${UPDATE_TOOLS_LOCK#$DIR/} is missing ${crate}"
   fi
   if [[ "$locked_binary" != "$binary" ]]; then
-    die "update-tools.lock.toml binary mismatch for ${crate}"
+    die "${UPDATE_TOOLS_LOCK#$DIR/} binary mismatch for ${crate}"
   fi
   if [[ "$locked_version" != "$expected" ]]; then
-    die "update-tools.lock.toml version mismatch for ${crate} (expected ${expected}, found ${locked_version})"
+    die "${UPDATE_TOOLS_LOCK#$DIR/} version mismatch for ${crate} (expected ${expected}, found ${locked_version})"
   fi
 
   local tool_tmp

@@ -38,11 +38,9 @@ Require CODEOWNER review for sensitive paths:
 - `Cargo.toml`
 - `Cargo.lock`
 - `deny.toml`
-- `rust-toolchain.lock.toml`
-- `update-tools.lock.toml`
+- `.cargo/tooling/**`
 - `vendor/**`
 - `vendor/release-tools/**`
-- Tool version files
 - Security and repository policy docs
 
 ## Releases

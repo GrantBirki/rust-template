@@ -9,9 +9,9 @@ require_cmd cargo
 require_cmd zig
 require_cmd cargo-zigbuild
 
-expected_zig="$(read_version_file "$DIR/.zig-version")"
+expected_zig="$(read_version_file "$ZIG_VERSION_FILE")"
 if [[ -z "$expected_zig" ]]; then
-  die ".zig-version is required"
+  die "${ZIG_VERSION_FILE#$DIR/} is required"
 fi
 
 actual_zig="$(zig version)"
@@ -19,9 +19,9 @@ if [[ "$actual_zig" != "$expected_zig" ]]; then
   die "zig version mismatch (expected ${expected_zig}, found ${actual_zig})"
 fi
 
-expected_zigbuild="$(read_version_file "$DIR/.cargo-zigbuild-version")"
+expected_zigbuild="$(read_version_file "$CARGO_ZIGBUILD_VERSION_FILE")"
 if [[ -z "$expected_zigbuild" ]]; then
-  die ".cargo-zigbuild-version is required"
+  die "${CARGO_ZIGBUILD_VERSION_FILE#$DIR/} is required"
 fi
 
 actual_zigbuild_output="$(cargo-zigbuild --version 2>/dev/null || true)"

@@ -57,8 +57,8 @@ rmdir "$tmp_vendor"
 tmp_vendor=""
 
 # Run security checks while online. Advisory DB updates require network.
-install_locked_update_tool cargo-audit cargo-audit "$DIR/.cargo-audit-version" "${CARGO_AUDIT_VERSION:-}"
-install_locked_update_tool cargo-deny cargo-deny "$DIR/.cargo-deny-version" "${CARGO_DENY_VERSION:-}"
+install_locked_update_tool cargo-audit cargo-audit "$CARGO_AUDIT_VERSION_FILE" "${CARGO_AUDIT_VERSION:-}"
+install_locked_update_tool cargo-deny cargo-deny "$CARGO_DENY_VERSION_FILE" "${CARGO_DENY_VERSION:-}"
 
 cargo audit
 cargo deny check
