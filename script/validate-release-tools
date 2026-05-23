@@ -3,6 +3,7 @@
 set -euo pipefail
 
 source script/env "$@"
+source "$DIR/script/lib/release-tools.bash"
 
 release_tools_dir="$DIR/vendor/release-tools"
 manifest="$release_tools_dir/manifest.toml"
@@ -16,140 +17,12 @@ if [[ ! -f "$manifest" ]]; then
   die "missing release-tool manifest: $manifest"
 fi
 
-sha256_file() {
-  local file="$1"
-  if command -v shasum >/dev/null 2>&1; then
-    shasum -a 256 "$file" | awk '{print $1}'
-  else
-    sha256sum "$file" | awk '{print $1}'
-  fi
-}
-
-sha256_stdin() {
-  if command -v shasum >/dev/null 2>&1; then
-    shasum -a 256 | awk '{print $1}'
-  else
-    sha256sum | awk '{print $1}'
-  fi
-}
-
-validate_tar_entries() {
-  local archive="$1"
-  local compression_flag="$2"
-  local entry
-
-  while IFS= read -r entry; do
-    [[ -n "$entry" ]] || continue
-    case "$entry" in
-      /*|../*|*/../*|*/..|..)
-        die "unsafe archive entry in ${archive#$DIR/}: $entry"
-        ;;
-    esac
-  done < <(tar -t"${compression_flag}"f "$archive")
-}
-
-archive_contains() {
-  local archive="$1"
-  local compression_flag="$2"
-  local expected="$3"
-
-  tar -t"${compression_flag}"f "$archive" | awk -v expected="$expected" '$0 == expected { found=1 } END { exit(found ? 0 : 1) }'
-}
-
-toml_value() {
-  local file="$1"
-  local key="$2"
-  sed -n "s/^${key}[[:space:]]*=[[:space:]]*\"\([^\"]*\)\"/\\1/p" "$file" | head -n1
-}
-
-reject_unsafe_relative_path() {
-  local path="$1"
-  local description="$2"
-
-  case "$path" in
-    ""|/*|../*|*/../*|*/..|..)
-      die "${description} contains unsafe path: $path"
-      ;;
-  esac
-}
-
-zig_entries() {
-  local file="$1"
-  awk '
-    function value(line) {
-      sub(/^[^=]*= "/, "", line)
-      sub(/"$/, "", line)
-      return line
-    }
-    /^\[\[zig\]\]/ {
-      if (in_zig && platform != "") {
-        print platform "|" arch "|" os "|" version "|" url "|" path "|" sha256
-      }
-      in_zig = 1
-      platform = arch = os = version = url = path = sha256 = ""
-      next
-    }
-    /^\[/ {
-      if (in_zig && platform != "") {
-        print platform "|" arch "|" os "|" version "|" url "|" path "|" sha256
-      }
-      in_zig = 0
-      next
-    }
-    in_zig && $1 == "platform" { platform = value($0) }
-    in_zig && $1 == "arch" { arch = value($0) }
-    in_zig && $1 == "os" { os = value($0) }
-    in_zig && $1 == "version" { version = value($0) }
-    in_zig && $1 == "url" { url = value($0) }
-    in_zig && $1 == "path" { path = value($0) }
-    in_zig && $1 == "sha256" { sha256 = value($0) }
-    END {
-      if (in_zig && platform != "") {
-        print platform "|" arch "|" os "|" version "|" url "|" path "|" sha256
-      }
-    }
-  ' "$file"
-}
-
-cargo_zigbuild_lock_entry() {
-  local file="$1"
-  awk '
-    function value(line) {
-      sub(/^[^=]*= "/, "", line)
-      sub(/"$/, "", line)
-      return line
-    }
-    /^\[cargo_zigbuild\]/ {
-      in_cargo = 1
-      next
-    }
-    /^\[/ {
-      if (in_cargo) {
-        in_cargo = 0
-      }
-      next
-    }
-    in_cargo && $1 == "version" { version = value($0) }
-    in_cargo && $1 == "url" { url = value($0) }
-    in_cargo && $1 == "crate_path" { crate_path = value($0) }
-    in_cargo && $1 == "crate_sha256" { crate_sha256 = value($0) }
-    END {
-      print version "|" url "|" crate_path "|" crate_sha256
-    }
-  ' "$file"
-}
-
-manifest_value() {
-  local key="$1"
-  toml_value "$manifest" "$key"
-}
-
 zig_version="$(read_version_file "$DIR/.zig-version")"
 cargo_zigbuild_version="$(read_version_file "$DIR/.cargo-zigbuild-version")"
 lock_zig_version="$(toml_value "$lockfile" "zig_version")"
 lock_zigbuild_version="$(toml_value "$lockfile" "cargo_zigbuild_version")"
-manifest_zig_version="$(manifest_value "zig_version")"
-manifest_zigbuild_version="$(manifest_value "cargo_zigbuild_version")"
+manifest_zig_version="$(toml_value "$manifest" "zig_version")"
+manifest_zigbuild_version="$(toml_value "$manifest" "cargo_zigbuild_version")"
 
 if [[ "$lock_zig_version" != "$zig_version" ]]; then
   die "release-tools.lock.toml Zig version mismatch (expected ${zig_version}, found ${lock_zig_version:-missing})"
@@ -167,7 +40,7 @@ if [[ "$manifest_zigbuild_version" != "$cargo_zigbuild_version" ]]; then
   die "manifest cargo-zigbuild version mismatch (expected ${cargo_zigbuild_version}, found ${manifest_zigbuild_version:-missing})"
 fi
 
-if ! diff -u <(zig_entries "$lockfile" | sort) <(zig_entries "$manifest" | sort); then
+if ! diff -u <(release_tools_zig_entries "$lockfile" | sort) <(release_tools_zig_entries "$manifest" | sort); then
   die "release-tool lockfile and manifest Zig entries differ"
 fi
 
@@ -190,14 +63,14 @@ while IFS='|' read -r platform arch os version url path sha256; do
     die "Zig checksum mismatch for $path"
   fi
   validate_tar_entries "$artifact" J
-done < <(zig_entries "$manifest")
+done < <(release_tools_zig_entries "$manifest")
 
 if [[ "$zig_count" -ne 4 ]]; then
   die "expected 4 vendored Zig artifacts, found $zig_count"
 fi
 
-lock_cargo_zigbuild_entry="$(cargo_zigbuild_lock_entry "$lockfile")"
-manifest_cargo_zigbuild_entry="$(cargo_zigbuild_lock_entry "$manifest")"
+lock_cargo_zigbuild_entry="$(release_tools_cargo_zigbuild_entry "$lockfile")"
+manifest_cargo_zigbuild_entry="$(release_tools_cargo_zigbuild_entry "$manifest")"
 if [[ "$lock_cargo_zigbuild_entry" != "$manifest_cargo_zigbuild_entry" ]]; then
   die "release-tool lockfile and manifest cargo-zigbuild upstream entries differ"
 fi
@@ -210,17 +83,17 @@ if [[ "$lock_cargo_entry_version" != "$cargo_zigbuild_version" ]]; then
 fi
 reject_unsafe_relative_path "$lock_cargo_entry_path" "release-tools.lock.toml cargo-zigbuild crate path"
 
-cargo_crate_path="$(manifest_value "crate_path")"
-cargo_crate_sha256="$(manifest_value "crate_sha256")"
-cargo_source_archive_path="$(manifest_value "source_archive_path")"
-cargo_source_archive_sha256="$(manifest_value "source_archive_sha256")"
-cargo_source_archive_root="$(manifest_value "source_archive_root")"
-cargo_vendor_archive_path="$(manifest_value "vendor_archive_path")"
-cargo_vendor_archive_sha256="$(manifest_value "vendor_archive_sha256")"
-cargo_vendor_archive_root="$(manifest_value "vendor_archive_root")"
-cargo_vendor_dir="$(manifest_value "vendor_dir")"
-cargo_lockfile_path="$(manifest_value "lockfile_path")"
-cargo_lockfile_sha256="$(manifest_value "lockfile_sha256")"
+cargo_crate_path="$(toml_value "$manifest" "crate_path")"
+cargo_crate_sha256="$(toml_value "$manifest" "crate_sha256")"
+cargo_source_archive_path="$(toml_value "$manifest" "source_archive_path")"
+cargo_source_archive_sha256="$(toml_value "$manifest" "source_archive_sha256")"
+cargo_source_archive_root="$(toml_value "$manifest" "source_archive_root")"
+cargo_vendor_archive_path="$(toml_value "$manifest" "vendor_archive_path")"
+cargo_vendor_archive_sha256="$(toml_value "$manifest" "vendor_archive_sha256")"
+cargo_vendor_archive_root="$(toml_value "$manifest" "vendor_archive_root")"
+cargo_vendor_dir="$(toml_value "$manifest" "vendor_dir")"
+cargo_lockfile_path="$(toml_value "$manifest" "lockfile_path")"
+cargo_lockfile_sha256="$(toml_value "$manifest" "lockfile_sha256")"
 
 if [[ -z "$cargo_crate_path" || -z "$cargo_crate_sha256" || -z "$cargo_source_archive_path" || -z "$cargo_source_archive_sha256" || -z "$cargo_source_archive_root" || -z "$cargo_vendor_archive_path" || -z "$cargo_vendor_archive_sha256" || -z "$cargo_vendor_archive_root" || -z "$cargo_vendor_dir" || -z "$cargo_lockfile_path" || -z "$cargo_lockfile_sha256" ]]; then
   die "manifest is missing cargo-zigbuild fields"

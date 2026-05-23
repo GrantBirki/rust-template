@@ -23,6 +23,8 @@ export RUST_ENV
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && cd .. && pwd )"
 export DIR
 
+source "$DIR/script/lib/common.bash"
+
 read_version_file() {
   local file="$1"
   if [[ -f "$file" ]]; then

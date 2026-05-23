@@ -78,32 +78,6 @@ generate_docs() {
   "$host_bin" man > "$docs_dir/man/${package_name}.1"
 }
 
-assert_tool_version() {
-  local tool="$1"
-  local expected_file="$2"
-  local actual_version="$3"
-
-  if [[ -f "$expected_file" ]]; then
-    local expected
-    expected=$(head -n1 "$expected_file" | tr -d '[:space:]')
-    if [[ -n "$expected" && "$actual_version" != "$expected" ]]; then
-      die "${tool} version mismatch (expected ${expected}, found ${actual_version})"
-    fi
-  fi
-}
-
-rust_target_installed() {
-  local target="$1"
-  local sysroot
-
-  sysroot="$(rustc --print sysroot 2>/dev/null || true)"
-  if [[ -z "$sysroot" ]]; then
-    return 1
-  fi
-
-  [[ -d "$sysroot/lib/rustlib/$target/lib" ]]
-}
-
 release_mode=false
 universal_darwin=false
 dist_dir="$DIR/dist"
