@@ -148,8 +148,9 @@ That command writes LCOV and HTML output under `coverage/` and enforces 100% lin
 Releases are triggered by version bumps in `Cargo.toml`:
 
 1. Update `version = "X.Y.Z"` in `Cargo.toml`.
-2. Commit the change, open a PR, and merge to `main`.
-3. The release workflow detects the version bump, builds artifacts, then creates the `vX.Y.Z` tag and publishes a GitHub release.
+2. Refresh `Cargo.lock` so the root `rust-template` package entry has the same version.
+3. Commit only those version changes, open a PR, and merge to `main`.
+4. The release workflow detects the version bump, builds artifacts, then creates the `vX.Y.Z` tag and publishes a GitHub release.
 
 Do not create or push tags manually; CI is the source of truth for tags and releases. The release workflow intentionally has no manual dispatch path.
 
@@ -162,28 +163,15 @@ Release build jobs use checksum-gated Rust preparation and committed release-too
 Since the releases are signed using GitHub Artifact Attestations, you can verify the authenticity of the release artifacts using the GitHub CLI.
 
 ```console
-$ gh attestation verify --owner grantbirki rust-template_v0.0.3_darwin-arm64
-Loaded digest sha256:bd972559625347da0662076147b4353c13af8aa9ed9b2d4ce48f535c8e2c5a89 for file://rust-template_v0.0.3_darwin-arm64
-Loaded 1 attestation from GitHub API
-
-The following policy criteria will be enforced:
-- Predicate type must match:................ https://slsa.dev/provenance/v1
-- Source Repository Owner URI must match:... https://github.com/grantbirki
-- Subject Alternative Name must match regex: (?i)^https://github.com/grantbirki/
-- OIDC Issuer must match:................... https://token.actions.githubusercontent.com
-
-✓ Verification succeeded!
-
-The following 1 attestation matched the policy criteria
-
-- Attestation #1
-  - Build repo:..... GrantBirki/rust-template
-  - Build workflow:. .github/workflows/release.yml@refs/tags/v0.0.3
-  - Signer repo:.... GrantBirki/rust-template
-  - Signer workflow: .github/workflows/release.yml@refs/tags/v0.0.3
+gh release download vX.Y.Z --repo GrantBirki/rust-template --dir release-download
+cd release-download
+shasum -a 256 -c checksums.txt
+gh attestation verify rust-template_vX.Y.Z_darwin-universal.tar.gz \
+  --repo GrantBirki/rust-template \
+  --signer-workflow GrantBirki/rust-template/.github/workflows/release.yml
 ```
 
-Release assets also include `checksums.txt`. Verify checksums before verifying attestations:
+Release assets include `checksums.txt`. Verify checksums before verifying attestations:
 
 ```console
 shasum -a 256 -c checksums.txt
