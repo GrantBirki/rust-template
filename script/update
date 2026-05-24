@@ -3,44 +3,16 @@
 set -euo pipefail
 
 source script/env "$@"
+source "$DIR/script/lib/update-tools.bash"
 
 ensure_rust_toolchain
 
 unset CARGO_NET_OFFLINE
 
 echo -e "Rust version: ${GREEN}${RUST_VERSION}${OFF}"
-
-install_cargo_tool() {
-  local binary="$1"
-  local crate="$2"
-  local version_file="$3"
-  local version_override="${4:-}"
-  local expected="$version_override"
-
-  if [[ -z "$expected" ]]; then
-    expected="$(read_version_file "$version_file")"
-  fi
-
-  if [[ -z "$expected" ]]; then
-    die "$(basename "$version_file") is required to pin ${crate}"
-  fi
-
-  local installed=""
-  if command -v "$binary" >/dev/null 2>&1; then
-    installed="$("$binary" --version 2>/dev/null | awk '{print $2}')"
-  fi
-
-  if [[ "$installed" == "$expected" ]]; then
-    return
-  fi
-
-  cargo install --locked --version "$expected" "$crate"
-
-  installed="$("$binary" --version 2>/dev/null | awk '{print $2}')"
-  if [[ "$installed" != "$expected" ]]; then
-    die "${crate} version mismatch (expected ${expected}, found ${installed:-unknown})"
-  fi
-}
+script/validate-update-tools --ci
+require_cmd curl
+require_cmd tar
 
 config="$DIR/.cargo/config.toml"
 backup="$DIR/.cargo/config.toml.bak"
@@ -76,7 +48,7 @@ cargo update
 if [[ -z "$VENDOR_DIR" || "$VENDOR_DIR" == "/" ]]; then
   die "invalid vendor directory: ${VENDOR_DIR:-unset}"
 fi
-tmp_vendor="$(mktemp -d "${TMPDIR:-/tmp}/rust-template-vendor.XXXXXX")"
+tmp_vendor="$(make_temp_dir rust-template-vendor)"
 cargo vendor --locked --versioned-dirs "$tmp_vendor"
 rm -rf "$VENDOR_DIR"
 mkdir -p "$VENDOR_DIR"
@@ -85,8 +57,8 @@ rmdir "$tmp_vendor"
 tmp_vendor=""
 
 # Run security checks while online. Advisory DB updates require network.
-install_cargo_tool cargo-audit cargo-audit "$DIR/.cargo-audit-version" "${CARGO_AUDIT_VERSION:-}"
-install_cargo_tool cargo-deny cargo-deny "$DIR/.cargo-deny-version" "${CARGO_DENY_VERSION:-}"
+install_locked_update_tool cargo-audit cargo-audit "$CARGO_AUDIT_VERSION_FILE" "${CARGO_AUDIT_VERSION:-}"
+install_locked_update_tool cargo-deny cargo-deny "$CARGO_DENY_VERSION_FILE" "${CARGO_DENY_VERSION:-}"
 
 cargo audit
 cargo deny check

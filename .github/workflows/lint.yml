@@ -33,6 +33,9 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: validate locks
+        run: script/validate-locks --ci
+
       - name: prepare rust
         run: script/prepare-rust
 

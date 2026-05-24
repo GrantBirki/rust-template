@@ -6,19 +6,15 @@
 
 /script/** @GrantBirki
 /.cargo/config.toml @GrantBirki
+/.cargo/tooling/** @GrantBirki
 
 /Cargo.toml @GrantBirki
 /Cargo.lock @GrantBirki
 /deny.toml @GrantBirki
-/release-tools.lock.toml @GrantBirki
 /vendor/** @GrantBirki
 
 /rust-toolchain.toml @GrantBirki
 /.rust-version @GrantBirki
-/.zig-version @GrantBirki
-/.cargo-zigbuild-version @GrantBirki
-/.cargo-audit-version @GrantBirki
-/.cargo-deny-version @GrantBirki
 
 /AGENTS.md @GrantBirki
 /README.md @GrantBirki

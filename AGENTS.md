@@ -2,7 +2,7 @@
 
 This repository is a Rust template for hermetic, reproducible, air-gapped-leaning projects. Treat it as public open source infrastructure: every file, comment, workflow, log line, and document change may be visible to anyone.
 
-The template is meant to be copied into services, CLIs, and libraries that must pass the "airplane test": a normal developer or CI worker should be able to build, test, lint, and package the project without reaching the network after dependencies and toolchains have been prepared.
+The template is meant to be copied into services, CLIs, and libraries that must pass the "airplane test": a normal developer or CI worker should be able to build, test, lint, and package the project without reaching the network after dependencies and toolchains have been explicitly prepared.
 
 ## North-Star Principles
 
@@ -26,30 +26,32 @@ The template is meant to be copied into services, CLIs, and libraries that must 
 
 - No network calls during `script/bootstrap`, `script/test`, `script/lint`, `script/build`, or `script/server`.
 - `script/update` is the only normal Cargo dependency update path and is intentionally online-only.
+- `script/vendor-rust` is the only normal Rust distribution lock refresh path and is intentionally online-only.
+- `script/prepare-rust` is the only normal Rust installation path. It is intentionally online, checksum-gated, and must validate `.cargo/tooling/rust-toolchain.lock.toml` before invoking `rustup`.
+- `script/vendor-update-tools` is the only normal `cargo-audit` / `cargo-deny` lock refresh path and is intentionally online-only.
 - `script/vendor-release-tools` is the only release-tool refresh path and is intentionally online-only.
 - `script/install-zig` must stay offline-only. It installs Zig and `cargo-zigbuild` from committed artifacts under `vendor/release-tools`.
-- Release build jobs must not run `curl`, `cargo install --version`, `rustup target add`, or Rust toolchain setup actions.
+- Release build jobs must not run direct `curl`, `cargo install --version`, `rustup target add`, or Rust toolchain setup actions outside the repo scripts.
 - Release jobs must verify exact release tool versions after installing from committed artifacts.
+- Release workflows must not expose `workflow_dispatch`; releases are created only from `Cargo.toml` version bumps merged to `main`.
 - All direct Cargo dependencies in `Cargo.toml` must use exact versions such as `=1.2.3`.
 - `Cargo.lock` is committed and treated as source of truth.
 - Vendored crates live in `vendor/cache` and are required for offline builds.
 - Local non-CI scripts should prefer ignored repo-local temp roots such as `target/tmp` for Rust, Zig, Cargo, and release-tool scratch artifacts. Respect caller-provided `TMPDIR` and `RUNNER_TEMP`.
-- `rust-toolchain.toml`, `.rust-version`, `Cargo.toml` `rust-version`, `.zig-version`, `.cargo-zigbuild-version`, `release-tools.lock.toml`, and `vendor/release-tools/manifest.toml` must stay consistent with actual supported tools.
+- `rust-toolchain.toml`, `.rust-version`, `Cargo.toml` `rust-version`, `.cargo/tooling/rust-toolchain.lock.toml`, `.cargo/tooling/zig-version`, `.cargo/tooling/cargo-zigbuild-version`, `.cargo/tooling/cargo-audit-version`, `.cargo/tooling/cargo-deny-version`, `.cargo/tooling/update-tools.lock.toml`, `.cargo/tooling/release-tools.lock.toml`, and `vendor/release-tools/manifest.toml` must stay consistent with actual supported tools.
 - GitHub Actions must be pinned to full commit SHAs.
 - Checkout steps should use `persist-credentials: false` unless a job explicitly needs credentials persisted.
-- The Rust toolchain and Rust target standard libraries are not vendored in this pass. `script/prepare-rust` is the explicit online preparation path for local developers plus hosted lint/test/build validation; stricter release jobs require Rust and target standard libraries to be present or vendored in a future pass.
+- Rust distribution artifacts are not committed. `.cargo/tooling/rust-toolchain.lock.toml` pins the official Rust distribution URLs and SHA-256s that `script/prepare-rust` verifies before installing with `rustup`.
 
 ## Hermeticity Model
 
 There are three different levels in this template. Keep them distinct when editing docs or workflows.
 
-1. Local project workflow: explicit online Rust preparation with `script/prepare-rust` when needed, then offline Cargo validation through vendored sources. `script/bootstrap`, `script/test`, `script/lint`, `script/build`, and `script/server` enforce the offline phase.
-2. GitHub-hosted validation: `lint`, `test`, and PR `build` follow the same prepare-then-offline model as local development. Hosted runners are not air-gapped infrastructure, and the stricter `release` workflow intentionally does not prepare Rust for the runner.
-3. Egress-blocked build/package jobs: after checkout and action loading, build/test/package jobs can run without third-party network access because application crates and release tools are committed. Release publish/sign/verify jobs still need GitHub API access.
+1. Local project workflow: checksum-gated online Rust preparation with `script/prepare-rust` when needed, then offline Cargo validation through vendored sources. `script/bootstrap`, `script/test`, `script/lint`, `script/build`, and `script/server` enforce the offline phase.
+2. GitHub-hosted validation: `lint`, `test`, PR `build`, and release build jobs run `script/validate-locks --ci`, then `script/prepare-rust`, then the normal offline scripts. Hosted runners are not air-gapped infrastructure because checkout, action loading, Rust preparation, and artifact services still use network access.
+3. Egress-blocked build/package jobs: after checkout, action loading, Rust preparation, and release-tool installation, build/test/package scripts can run without third-party network access because application crates and release tools are committed. Release publish/sign/verify jobs still need GitHub API access.
 
 Do not describe GitHub-hosted runners as fully air-gapped. They can validate offline script behavior, but they are not an egress-blocked environment.
-
-The remaining blocker for fully egress-blocked release builds is Rust itself: this repo does not yet vendor the Rust toolchain or target standard libraries.
 
 ## Local Artifact Placement
 
@@ -62,21 +64,35 @@ Keep transient tool outputs close to the repo when reasonable.
 - Preserve explicit caller or CI temp roots. GitHub Actions jobs should continue using the runner-provided environment where appropriate.
 - If a future script needs a scratch directory, derive it from `TMPDIR`, `RUNNER_TEMP`, `target/`, or another ignored repo-local path instead of choosing an OS-global location by default.
 
+## Bash Maintainability
+
+Keep the Bash support layer DRY enough to audit.
+
+- New `script/*` entrypoints should source `script/env` and use shared helpers from `script/lib` instead of copying hash, TOML, archive, temp-directory, fetch, version, or lockfile parsing logic.
+- Put generic helpers in `script/lib/common.bash`; put Rust distribution, update-tool, and release-tool helpers in their domain-specific `script/lib/*.bash` files.
+- Keep top-level scripts as orchestration: argument parsing, online/offline intent, command ordering, and script-specific policy checks should stay easy to read.
+- Do not hide security-critical workflow guardrails behind opaque abstractions when the explicit pattern is easier to audit.
+- DRY refactors must preserve hermeticity, offline defaults, path-safety checks, checksum checks, exact version checks, and the intentional online-only boundaries.
+- Small script-local helpers are acceptable when generalizing them would make the script harder to understand or weaken reviewability.
+
 ## Script Contracts
 
 All scripts live in `script/` and should use `set -euo pipefail` unless there is a documented reason not to.
 
 - `script/env`
   - Shared environment and helper functions.
+  - Sources `script/lib/common.bash`; domain-specific scripts may also source focused helpers under `script/lib/`.
   - Exports offline Cargo defaults and disables rustup proxy auto-installation.
   - Outside CI, defaults `RUNNER_TEMP` and `TMPDIR` to `target/tmp` unless the caller already set them.
-  - Defines `DIR`, `VENDOR_DIR`, toolchain checks, vendor checks, and common `die`/`warn` helpers.
+  - Defines `DIR`, `VENDOR_DIR`, Rust toolchain checks, vendor checks, and common `die`/`warn` helpers.
   - Do not add network behavior here.
 
 - `script/prepare-rust`
-  - Explicit online Rust preparation path for local developers and hosted lint/test validation.
+  - Explicit online Rust preparation path for local developers and hosted validation.
+  - Runs `script/validate-rust-toolchain --ci` before installing anything.
   - Installs the exact Rust toolchain from `rust-toolchain.toml` with the minimal profile plus `rustfmt` and `clippy`.
-  - Does not install cross-target standard libraries.
+  - Installs extra target standard libraries only when `PREPARE_RUST_TARGETS` or `VERIFY_RUST_TARGETS` is set.
+  - Does not run from offline project scripts.
 
 - `script/bootstrap`
   - Validates Rust and Cargo availability.
@@ -110,8 +126,32 @@ All scripts live in `script/` and should use `set -euo pipefail` unless there is
 - `script/update`
   - Online-only dependency refresh path.
   - Temporarily moves `.cargo/config.toml` aside to allow Cargo registry access.
-  - Runs `cargo update`, re-vendors with `cargo vendor --locked --versioned-dirs`, runs pinned audit/deny checks, restores offline config, then verifies with offline scripts.
+  - Runs `cargo update`, re-vendors with `cargo vendor --locked --versioned-dirs`, installs checksum-locked `cargo-audit` and `cargo-deny` from `.cargo/tooling/update-tools.lock.toml`, runs audit/deny checks, restores offline config, then verifies with offline scripts.
   - Dependency update PRs must include `Cargo.lock` and `vendor/cache` changes.
+
+- `script/vendor-update-tools`
+  - Online-only update-tool refresh path.
+  - Fetches the locked `cargo-audit` and `cargo-deny` top-level crates from crates.io, verifies that each package includes `Cargo.lock`, and writes crate plus packaged-lockfile checksums to `.cargo/tooling/update-tools.lock.toml`.
+  - Must be run intentionally and reviewed like any other supply-chain update.
+
+- `script/validate-update-tools`
+  - Offline validation for `.cargo/tooling/update-tools.lock.toml` schema, version-file consistency, crates.io URLs, and checksum formats.
+  - With `--ci`, fetches the top-level crates and verifies crate SHA-256s plus packaged `Cargo.lock` SHA-256s before expensive CI work runs.
+
+- `script/vendor-rust`
+  - Online-only Rust distribution lock refresh path.
+  - Fetches the official Rust channel manifest, verifies the manifest `.sha256`, and writes `.cargo/tooling/rust-toolchain.lock.toml`.
+  - Locks upstream URLs and SHA-256s for `rustc`, `cargo`, `rustfmt`, `clippy`, and configured Rust target standard libraries.
+  - Must be run intentionally and reviewed like any other supply-chain update.
+
+- `script/validate-rust-toolchain`
+  - Offline validation for Rust version-file consistency and lockfile coverage.
+  - With `--ci`, fetches the official Rust channel metadata and fails if locked URLs or SHA-256s differ.
+
+- `script/validate-locks`
+  - Top-level fast lock gate for CI.
+  - Runs Rust, update-tool, release-tool, Cargo/vendor, GitHub Actions SHA, and workflow image digest checks.
+  - CI should run `script/validate-locks --ci` immediately after checkout.
 
 - `script/install-zig`
   - Offline-only release-tool installer.
@@ -124,7 +164,7 @@ All scripts live in `script/` and should use `set -euo pipefail` unless there is
 
 - `script/vendor-release-tools`
   - Online-only release-tool refresh path.
-  - Reads upstream release-tool URLs and checksums from `release-tools.lock.toml`.
+  - Reads upstream release-tool URLs and checksums from `.cargo/tooling/release-tools.lock.toml`.
   - Fetches locked Zig host archives and the locked `cargo-zigbuild` crate.
   - Generates/preserves the `cargo-zigbuild` lockfile, commits a standalone reviewable lockfile copy, vendors its transitive crates, writes deterministic source/vendor `.tar.gz` archives, and writes `vendor/release-tools/manifest.toml`.
   - Must be run intentionally and reviewed like any other supply-chain update.
@@ -132,7 +172,8 @@ All scripts live in `script/` and should use `set -euo pipefail` unless there is
 - `script/validate-release-tools`
   - Offline validation for committed release-tool artifacts.
   - Verifies lockfile and manifest version consistency, lockfile/manifest agreement, artifact existence, SHA-256 checksums, archive path safety, standalone lockfile consistency, `cargo-zigbuild` source/lock/vendor archive state, and release workflow/install-script network guardrails.
-  - Must fail if release-tool scripts contain embedded SHA-256 literals; expected upstream hashes belong in `release-tools.lock.toml`.
+  - Must fail if release-tool scripts contain embedded SHA-256 literals; expected upstream hashes belong in `.cargo/tooling/release-tools.lock.toml`.
+  - Must fail if the release workflow exposes a manual `workflow_dispatch` trigger.
 
 - `script/verify-release-toolchain`
   - Offline verification for release builders.
@@ -147,8 +188,10 @@ All scripts live in `script/` and should use `set -euo pipefail` unless there is
 - Do not add git dependencies unless the change is explicitly justified and pinned to an immutable revision.
 - Do not add path dependencies to template defaults unless the repo becomes a workspace template.
 - `vendor/cache` should be generated by Cargo, not manually curated.
-- `release-tools.lock.toml` is the human-reviewed lock for upstream release-tool URLs and checksums.
-- `vendor/release-tools` should be generated by `script/vendor-release-tools`, not manually curated. Review release-tool updates by checking pinned versions, upstream URLs, `release-tools.lock.toml`, generated manifest checksums, archive regeneration behavior, and install/validation scripts; do not treat archived third-party tool contents as first-party template code.
+- `.cargo/tooling/rust-toolchain.lock.toml` is the human-reviewed lock for upstream Rust distribution URLs and checksums.
+- `.cargo/tooling/update-tools.lock.toml` is the human-reviewed lock for online update-path Cargo tool crate URLs, crate checksums, and packaged `Cargo.lock` checksums.
+- `.cargo/tooling/release-tools.lock.toml` is the human-reviewed lock for upstream release-tool URLs and checksums.
+- `vendor/release-tools` should be generated by `script/vendor-release-tools`, not manually curated. Review release-tool updates by checking pinned versions, upstream URLs, `.cargo/tooling/release-tools.lock.toml`, generated manifest checksums, archive regeneration behavior, and install/validation scripts; do not treat archived third-party tool contents as first-party template code.
 - New dependency governance tools must be pinned and either preinstalled for offline paths or limited to `script/update`.
 - `cargo-vet`, SBOM generation, and auditable binaries are intended staged follow-ups. Do not quietly add online release downloads for those tools.
 
@@ -159,23 +202,24 @@ Keep these aligned:
 - `rust-toolchain.toml`: exact Rust toolchain and components.
 - `.rust-version`: same Rust version as `rust-toolchain.toml`.
 - `Cargo.toml` `rust-version`: same enforced Rust version unless the repo intentionally adopts a separate MSRV policy with CI coverage.
-- `.zig-version`: Zig version required for cross release builds.
-- `.cargo-zigbuild-version`: `cargo-zigbuild` version required for cross release builds.
-- `.cargo-audit-version`: online update path `cargo-audit` version.
-- `.cargo-deny-version`: online update path `cargo-deny` version.
-- `release-tools.lock.toml`: upstream release-tool URL and checksum lock.
+- `.cargo/tooling/rust-toolchain.lock.toml`: upstream Rust distribution URL and checksum lock.
+- `.cargo/tooling/zig-version`: Zig version required for cross release builds.
+- `.cargo/tooling/cargo-zigbuild-version`: `cargo-zigbuild` version required for cross release builds.
+- `.cargo/tooling/cargo-audit-version`: online update path `cargo-audit` version.
+- `.cargo/tooling/cargo-deny-version`: online update path `cargo-deny` version.
+- `.cargo/tooling/update-tools.lock.toml`: upstream update-tool crate URL, crate checksum, and packaged `Cargo.lock` checksum lock.
+- `.cargo/tooling/release-tools.lock.toml`: upstream release-tool URL and checksum lock.
 - `vendor/release-tools/manifest.toml`: committed release-tool artifact inventory and checksums.
 
 If any version file changes, update docs and verify the corresponding script behavior.
 
 ## CI Expectations
 
-- The `build` workflow is the PR-based release smoke test. It should install vendored release tools, verify them, run `script/bootstrap`, and run `script/build --release`.
-- Hosted lint/test/build workflows should run `script/prepare-rust`, then `script/bootstrap`, then their offline validation command or release-smoke path.
+- The `build` workflow is the PR-based release smoke test. It should validate locks, prepare Rust, install release tools, verify them, run `script/bootstrap`, and run `script/build --release`.
+- Hosted lint/test/build workflows should run `script/validate-locks --ci`, then `script/prepare-rust`, then `script/bootstrap`, then their offline validation command or release-smoke path.
 - Hosted validation should rely on offline defaults from `script/env` after explicit preparation completes.
-- The `build` workflow is the PR-based release smoke test. It should call `script/prepare-rust`, then exercise vendored release-tool installation and release-mode packaging through the normal offline script surface.
-- Do not add Rust toolchain setup actions to hosted lint/test/build workflows; use `script/prepare-rust` so the preparation path stays explicit and repo-owned.
-- Release build jobs should run `script/install-zig`, then `script/verify-release-toolchain`, then `script/bootstrap`, then `script/build --release ...`; they must not call `script/prepare-rust`.
+- Do not add Rust toolchain setup actions to hosted lint/test/build workflows; use `script/prepare-rust` so the preparation path stays explicit, checksum-gated, and repo-owned.
+- Release build jobs should run `script/validate-locks --ci`, then `script/prepare-rust` with the required `PREPARE_RUST_TARGETS`, then `script/install-zig`, then `script/verify-release-toolchain`, then `script/bootstrap`, then `script/build --release ...`.
 - Release build jobs must install release tools from committed artifacts. Cross-target release jobs must fail if required Rust targets are missing.
 - Release publication should use a protected `release` environment.
 - Final release assets should be re-downloaded from GitHub Releases, checksum-verified, and attestation-verified.
@@ -187,10 +231,10 @@ If any version file changes, update docs and verify the corresponding script beh
 
 - `Cargo.toml` `version` is the release trigger.
 - Merging a version bump to `main` creates the `vX.Y.Z` release through CI.
+- The release workflow is intentionally not manually dispatchable.
 - Do not create or push release tags manually unless the workflow is intentionally being recovered.
 - Release artifacts should include binaries, completions, man pages, checksums, and attestations.
 - Release timestamps should come from `SOURCE_DATE_EPOCH`, normally the commit timestamp.
-- The next hardening step is vendoring or otherwise provisioning the Rust toolchain and Rust target standard libraries without release-time downloads.
 
 ## Rust Code Standards
 
@@ -224,7 +268,10 @@ Use the smallest validation set that proves the change:
 - Rust behavior changes: `script/bootstrap`, `script/test`, `script/lint`, and `script/build`.
 - Coverage changes: `script/test --cov` only when coverage tools are already installed. Do not add a static coverage badge unless CI enforces and publishes the measured result.
 - Dependency updates: `script/update`, then inspect `Cargo.lock` and `vendor/cache`, then rerun offline validation.
-- Release-tool updates: inspect `release-tools.lock.toml`, run `script/vendor-release-tools`, then inspect `vendor/release-tools`, run `script/validate-release-tools`, and run `script/install-zig` on a supported host.
+- Lock surface changes: run `script/validate-locks --ci`.
+- Rust toolchain updates: run `script/vendor-rust`, inspect `.cargo/tooling/rust-toolchain.lock.toml`, then run `script/validate-rust-toolchain --ci` and `script/prepare-rust` on a supported host.
+- Update-tool changes: run `script/vendor-update-tools`, inspect `.cargo/tooling/update-tools.lock.toml`, then run `script/validate-update-tools --ci`.
+- Release-tool updates: inspect `.cargo/tooling/release-tools.lock.toml`, run `script/vendor-release-tools`, then inspect `vendor/release-tools`, run `script/validate-release-tools`, and run `script/install-zig` on a supported host.
 - Release workflow changes: inspect YAML carefully and ensure release jobs still verify published release assets.
 
 If local validation is blocked by missing tools or a local toolchain issue, report the exact blocker instead of implying the repo passed.

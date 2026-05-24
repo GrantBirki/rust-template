@@ -21,9 +21,9 @@ Some security controls cannot be fully represented in tracked files. Configure t
 - Require approval for first-time contributor workflows.
 - Keep GitHub Actions pinned to full commit SHAs.
 - Do not allow untrusted pull request workflows to receive write tokens.
-- Test, lint, and PR build jobs may run the explicit `script/prepare-rust` preflight, then should stay on the normal offline script surface.
-- Protected release-build jobs should not run Rust preparation or download third-party tools after checkout/action loading; they rely on preprovisioned Rust toolchains and committed release-tool artifacts.
-- Keep the `build` workflow as the PR-based release smoke test: install vendored release tools, verify them, then run release-mode packaging.
+- Test, lint, PR build, and release build jobs should run `script/validate-locks --ci`, then `script/prepare-rust`, then stay on the normal offline script surface.
+- Protected release-build jobs should not run direct Rust toolchain setup actions or download release tools after checkout/action loading; they rely on checksum-gated Rust preparation and committed release-tool artifacts.
+- Keep the `build` workflow as the PR-based release smoke test: validate locks, prepare Rust, install vendored release tools, verify them, then run release-mode packaging.
 - If an egress-blocking action is added, apply it to build/test/package jobs after checkout and before scripts run. Do not apply it to release publishing, signing, or verification jobs unless those jobs are split into an explicitly GitHub-network-allowed phase.
 
 ## CODEOWNERS
@@ -38,9 +38,9 @@ Require CODEOWNER review for sensitive paths:
 - `Cargo.toml`
 - `Cargo.lock`
 - `deny.toml`
+- `.cargo/tooling/**`
 - `vendor/**`
 - `vendor/release-tools/**`
-- Tool version files
 - Security and repository policy docs
 
 ## Releases
@@ -49,10 +49,10 @@ Require CODEOWNER review for sensitive paths:
 - Require reviewer approval before jobs using that environment can publish release assets.
 - Keep release publication permissions limited to the release job.
 - Verify release assets after publication by re-downloading them, checking `checksums.txt`, and verifying artifact attestations.
-- Release build jobs should install Zig and `cargo-zigbuild` from `vendor/release-tools`; they should not run `script/prepare-rust`, `curl`, `cargo install --version`, `rustup target add`, or Rust toolchain setup actions.
+- Release build jobs should prepare Rust through `script/prepare-rust` and install Zig/`cargo-zigbuild` from `vendor/release-tools`; they should not run direct `curl`, `cargo install --version`, `rustup target add`, or Rust toolchain setup actions outside the repo scripts.
 
 ## Dependabot
 
-- Keep GitHub Actions and Rust toolchain update checks enabled if they are useful.
+- Keep GitHub Actions and Rust toolchain update checks enabled if they are useful, but Rust toolchain bumps must be completed through `script/vendor-rust`.
 - Do not enable Cargo version update PRs unless there is automation that also regenerates `Cargo.lock` and `vendor/cache`.
 - Cargo dependency updates should normally be performed with `script/update`.
