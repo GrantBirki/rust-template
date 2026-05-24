@@ -4,7 +4,7 @@ use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
 use clap_complete::{Shell, generate};
 use clap_mangen::Man;
 use rust_template::{add, greet, subtract, version_info};
-use std::io;
+use std::io::{self, Write};
 
 #[derive(Parser)]
 #[command(
@@ -80,7 +80,23 @@ fn main() -> io::Result<()> {
 fn print_completions(shell: CompletionShell) {
     let mut cmd = Cli::command();
     let name = cmd.get_name().to_string();
-    generate(shell.as_shell(), &mut cmd, name, &mut io::stdout());
+
+    let mut output = Vec::new();
+    generate(shell.as_shell(), &mut cmd, name.clone(), &mut output);
+
+    let output = if matches!(shell, CompletionShell::Bash) && name.contains('-') {
+        let bad_root = name.replace('-', "__subcmd__");
+        let good_root = name.replace('-', "__");
+        String::from_utf8_lossy(&output)
+            .replace(&bad_root, &good_root)
+            .into_bytes()
+    } else {
+        output
+    };
+
+    io::stdout()
+        .write_all(&output)
+        .expect("writing shell completions to stdout should succeed");
 }
 
 fn print_man() -> io::Result<()> {
