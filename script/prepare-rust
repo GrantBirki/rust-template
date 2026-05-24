@@ -13,6 +13,7 @@ require_cmd rustup
 
 # This script is the intentional online Rust preparation path.
 unset CARGO_NET_OFFLINE
+unset RUSTUP_OFFLINE
 
 echo -e "${BLUE}Preparing Rust toolchain:${OFF} ${PURPLE}${expected}${OFF}"
 rustup toolchain install "$expected" \

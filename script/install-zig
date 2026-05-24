@@ -225,6 +225,7 @@ export PATH="$cargo_zigbuild_root/bin:$PATH"
 CARGO_HOME="$cargo_zigbuild_home" \
 CARGO_TARGET_DIR="$cargo_zigbuild_target" \
 CARGO_NET_OFFLINE=true \
+RUSTUP_OFFLINE=1 \
 cargo install \
   --path "$cargo_source_dir" \
   --locked \

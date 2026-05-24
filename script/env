@@ -12,6 +12,7 @@ export PURPLE='\033[0;35m'
 # Default to air-gapped Cargo behavior and prevent rustup proxies from
 # hydrating missing toolchains behind an offline script's back.
 export CARGO_NET_OFFLINE=true
+export RUSTUP_OFFLINE=1
 export RUSTUP_AUTO_INSTALL=0
 
 # set RUST_ENV to development (as a default) if not set
