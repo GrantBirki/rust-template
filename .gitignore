@@ -15,3 +15,15 @@ coverage/
 
 vendor/release-tools/cargo-zigbuild/source/*/target/
 vendor/release-tools/.tmp/
+
+.DS_Store
+tmp/
+*.pem
+*.log
+*.key
+*.crt
+*.secret
+*.env
+*.env.*
+*.bak
+*.backup
