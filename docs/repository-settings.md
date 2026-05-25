@@ -9,6 +9,7 @@ Some security controls cannot be fully represented in tracked files. Configure t
 - Require status checks before merge:
   - `lint`
   - `test`
+  - `coverage`
   - `build`
 - Require branches to be up to date before merging if that matches the repository's merge policy.
 - Block force-pushes.
@@ -21,7 +22,8 @@ Some security controls cannot be fully represented in tracked files. Configure t
 - Require approval for first-time contributor workflows.
 - Keep GitHub Actions pinned to full commit SHAs.
 - Do not allow untrusted pull request workflows to receive write tokens.
-- Test, lint, PR build, and release build jobs should run `script/validate-locks --ci`, then `script/prepare-rust`, then stay on the normal offline script surface.
+- Test, coverage, lint, PR build, and release build jobs should run `script/validate-locks --ci`, then `script/prepare-rust`, then stay on the normal offline script surface.
+- Coverage jobs should install `cargo-llvm-cov` with `script/install-test-tools`, then run `script/test --coverage`.
 - Protected release-build jobs should not run direct Rust toolchain setup actions or download release tools after checkout/action loading; they rely on checksum-gated Rust preparation and committed release-tool artifacts.
 - Keep the `build` workflow as the PR-based release smoke test: validate locks, prepare Rust, install vendored release tools, verify them, then run release-mode packaging.
 - If an egress-blocking action is added, apply it to build/test/package jobs after checkout and before scripts run. Do not apply it to release publishing, signing, or verification jobs unless those jobs are split into an explicitly GitHub-network-allowed phase.
@@ -40,6 +42,7 @@ Require CODEOWNER review for sensitive paths:
 - `deny.toml`
 - `.cargo/tooling/**`
 - `vendor/**`
+- `vendor/test-tools/**`
 - `vendor/release-tools/**`
 - Security and repository policy docs
 

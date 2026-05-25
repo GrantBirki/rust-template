@@ -42,6 +42,30 @@ jobs:
       - name: bootstrap
         run: script/bootstrap
 
-      # coverage checks are really really slow but they can be added with `script/test --cov`
       - name: test
         run: script/test
+
+  coverage:
+    name: coverage
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # pin@v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: validate locks
+        run: script/validate-locks --ci
+
+      - name: prepare rust
+        run: script/prepare-rust
+
+      - name: install test tools
+        run: script/install-test-tools
+
+      - name: bootstrap
+        run: script/bootstrap
+
+      - name: coverage
+        run: script/test --coverage

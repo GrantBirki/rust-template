@@ -30,8 +30,10 @@ TOOLING_DIR="$DIR/.cargo/tooling"
 RUST_TOOLCHAIN_LOCK="$TOOLING_DIR/rust-toolchain.lock.toml"
 UPDATE_TOOLS_LOCK="$TOOLING_DIR/update-tools.lock.toml"
 RELEASE_TOOLS_LOCK="$TOOLING_DIR/release-tools.lock.toml"
+TEST_TOOLS_LOCK="$TOOLING_DIR/test-tools.lock.toml"
 ZIG_VERSION_FILE="$TOOLING_DIR/zig-version"
 CARGO_ZIGBUILD_VERSION_FILE="$TOOLING_DIR/cargo-zigbuild-version"
+CARGO_LLVM_COV_VERSION_FILE="$TOOLING_DIR/cargo-llvm-cov-version"
 CARGO_AUDIT_VERSION_FILE="$TOOLING_DIR/cargo-audit-version"
 CARGO_DENY_VERSION_FILE="$TOOLING_DIR/cargo-deny-version"
 
@@ -39,8 +41,10 @@ export TOOLING_DIR
 export RUST_TOOLCHAIN_LOCK
 export UPDATE_TOOLS_LOCK
 export RELEASE_TOOLS_LOCK
+export TEST_TOOLS_LOCK
 export ZIG_VERSION_FILE
 export CARGO_ZIGBUILD_VERSION_FILE
+export CARGO_LLVM_COV_VERSION_FILE
 export CARGO_AUDIT_VERSION_FILE
 export CARGO_DENY_VERSION_FILE
 
@@ -177,6 +181,24 @@ else
   CARGO_ZIGBUILD_CACHE_DIR="${CARGO_ZIGBUILD_CACHE_DIR:-}"
 fi
 
+if [[ -f "$CARGO_LLVM_COV_VERSION_FILE" ]]; then
+  CARGO_LLVM_COV_VERSION="$(read_version_file "$CARGO_LLVM_COV_VERSION_FILE")"
+else
+  CARGO_LLVM_COV_VERSION=""
+fi
+
+if [[ -n "$CARGO_LLVM_COV_VERSION" ]]; then
+  CARGO_LLVM_COV_ROOT="${RUNNER_TEMP:-/tmp}/cargo-llvm-cov-${CARGO_LLVM_COV_VERSION}"
+  if [[ -d "$CARGO_LLVM_COV_ROOT/bin" ]]; then
+    case ":$PATH:" in
+      *":$CARGO_LLVM_COV_ROOT/bin:"*) ;;
+      *) export PATH="$CARGO_LLVM_COV_ROOT/bin:$PATH" ;;
+    esac
+  fi
+else
+  CARGO_LLVM_COV_ROOT=""
+fi
+
 export ZIG_VERSION
 export ZIG_ROOT
 export ZIG_GLOBAL_CACHE_DIR
@@ -185,6 +207,8 @@ export CARGO_ZIGBUILD_ZIG_PATH
 export CARGO_ZIGBUILD_VERSION
 export CARGO_ZIGBUILD_ROOT
 export CARGO_ZIGBUILD_CACHE_DIR
+export CARGO_LLVM_COV_VERSION
+export CARGO_LLVM_COV_ROOT
 
 VENDOR_DIR="$DIR/vendor/cache"
 export VENDOR_DIR

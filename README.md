@@ -14,7 +14,7 @@ A starter template for Rust projects.
 - Checksum-locked Rust distribution metadata for `rustc`, `cargo`, `rustfmt`, `clippy`, and target standard libraries
 - [Scripts to rule them all](https://github.blog/engineering/scripts-to-rule-them-all/)
 - Basic CI/CD setup
-- Basic testing setup with optional coverage support
+- High-bar Rust-native testing setup with vendored `cargo-llvm-cov` coverage support
 - Cross-platform build script with macOS universal binaries
 - CLI example with completions + man page generation
 - Pinned online dependency audit tooling (`cargo-audit` + `cargo-deny`) for `script/update`
@@ -41,6 +41,8 @@ Outside CI, shared script setup defaults `RUNNER_TEMP` and `TMPDIR` to the ignor
 GitHub-hosted `lint`, `test`, PR `build`, and release build jobs run `script/validate-locks --ci`, then `script/prepare-rust`, then enter the normal offline script surface. Hosted runners are not fully air-gapped infrastructure. Checkout, action loading, Rust preparation, artifact upload, release publication, and attestation verification still use networked platform services.
 
 Release build jobs install Zig and `cargo-zigbuild` from committed artifacts under `vendor/release-tools`. Zig is kept as upstream `.tar.xz` archives. `cargo-zigbuild` source and vendored dependencies are kept as deterministic `.tar.gz` archives that CI verifies and expands under `${RUNNER_TEMP}`. Those artifacts are refreshed only by `script/vendor-release-tools`, which is intentionally online-only. Upstream release-tool URLs and checksums are locked in `.cargo/tooling/release-tools.lock.toml`; the generated committed-artifact inventory lives in `vendor/release-tools/manifest.toml`.
+
+Coverage jobs install `cargo-llvm-cov` from committed artifacts under `vendor/test-tools`. Those artifacts are refreshed only by `script/vendor-test-tools`, which is intentionally online-only. Upstream test-tool URLs and checksums are locked in `.cargo/tooling/test-tools.lock.toml`; the generated committed-artifact inventory lives in `vendor/test-tools/manifest.toml`.
 
 Rust toolchain metadata is refreshed only by `script/vendor-rust`, which is intentionally online-only. Upstream Rust distribution inputs and checksums are locked in `.cargo/tooling/rust-toolchain.lock.toml`; Rust distribution tarballs are not committed.
 
@@ -131,17 +133,26 @@ script/vendor-release-tools
 
 This refreshes committed Zig tarballs, the `cargo-zigbuild` crate, deterministic `cargo-zigbuild` source/vendor archives, the standalone reviewable `cargo-zigbuild` lockfile, and `vendor/release-tools/manifest.toml`. Review release-tool updates by checking version pins, upstream URLs, `.cargo/tooling/release-tools.lock.toml`, generated manifest changes, lockfile changes, and the vendoring scripts rather than treating GitHub's expanded archive diff as first-party code. Do not mix release-tool vendoring with normal application dependency updates.
 
-## Coverage
-
-`cargo test` runs the Rust test suite, but it does not report line, branch, region, or function coverage. Rust coverage uses compiler instrumentation through [`rustc -C instrument-coverage`](https://doc.rust-lang.org/rustc/instrument-coverage.html) plus LLVM reporting tools.
-
-This template keeps coverage optional to avoid adding another required binary or CI dependency. `cargo-llvm-cov` and `llvm-tools-preview` are not part of the committed baseline toolchain. If they are already provisioned, run:
+Test-tool updates are separate from application dependency updates:
 
 ```console
-script/test --cov
+script/vendor-test-tools
 ```
 
-That command writes LCOV and HTML output under `coverage/` and enforces 100% line coverage for the current example code. Do not add a README coverage badge unless coverage is also enforced in CI and the badge is generated from that CI result; a static badge can drift from reality.
+This refreshes committed `cargo-llvm-cov` artifacts and `vendor/test-tools/manifest.toml`. Review test-tool updates by checking version pins, upstream URLs, `.cargo/tooling/test-tools.lock.toml`, generated manifest changes, checksums, and install/validation scripts. Do not mix test-tool vendoring with normal application dependency updates.
+
+## Coverage
+
+`script/test` is the main test entrypoint. It runs `cargo test --frozen`, which discovers Rust unit tests, integration tests, and documentation tests through Cargo's native test model. Unit tests should live next to implementation code; integration tests under `tests/` should exercise the public API or compiled binary behavior. See [Cargo Targets](https://doc.rust-lang.org/cargo/reference/cargo-targets.html) for Rust's native test target layout.
+
+`cargo test` does not report line, region, or function coverage by itself. Rust coverage uses compiler instrumentation through [`rustc -C instrument-coverage`](https://doc.rust-lang.org/rustc/instrument-coverage.html) plus LLVM reporting tools. This template uses a vendored `cargo-llvm-cov` binary for the coverage job:
+
+```console
+script/install-test-tools
+script/test --coverage
+```
+
+That command writes text, JSON, LCOV, and HTML output under `coverage/` and enforces 100% line, function, and region coverage for first-party example code. Branch coverage is intentionally omitted because `cargo-llvm-cov` documents branch coverage as [unstable](https://github.com/taiki-e/cargo-llvm-cov). Do not add a README coverage badge unless the badge is generated from the required CI coverage result; a static badge can drift from reality.
 
 ## Release Process
 

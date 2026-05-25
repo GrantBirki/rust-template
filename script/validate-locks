@@ -122,8 +122,10 @@ validate_tooling_layout() {
     "$RUST_TOOLCHAIN_LOCK"
     "$UPDATE_TOOLS_LOCK"
     "$RELEASE_TOOLS_LOCK"
+    "$TEST_TOOLS_LOCK"
     "$ZIG_VERSION_FILE"
     "$CARGO_ZIGBUILD_VERSION_FILE"
+    "$CARGO_LLVM_COV_VERSION_FILE"
     "$CARGO_AUDIT_VERSION_FILE"
     "$CARGO_DENY_VERSION_FILE"
   )
@@ -131,8 +133,10 @@ validate_tooling_layout() {
     "$DIR/rust-toolchain.lock.toml"
     "$DIR/update-tools.lock.toml"
     "$DIR/release-tools.lock.toml"
+    "$DIR/test-tools.lock.toml"
     "$DIR/.zig-version"
     "$DIR/.cargo-zigbuild-version"
+    "$DIR/.cargo-llvm-cov-version"
     "$DIR/.cargo-audit-version"
     "$DIR/.cargo-deny-version"
   )
@@ -162,6 +166,7 @@ else
 fi
 
 script/validate-release-tools
+script/validate-test-tools
 validate_cargo_vendor_surface
 validate_workflow_uses_pinned
 
