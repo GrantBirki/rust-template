@@ -79,7 +79,23 @@ fn main() {
 fn print_completions(shell: CompletionShell, stdout: &mut impl Write) {
     let mut cmd = Cli::command();
     let name = cmd.get_name().to_string();
-    generate(shell.as_shell(), &mut cmd, name, stdout);
+
+    let mut output = Vec::new();
+    generate(shell.as_shell(), &mut cmd, name.clone(), &mut output);
+
+    let output = if matches!(shell, CompletionShell::Bash) && name.contains('-') {
+        let bad_root = name.replace('-', "__subcmd__");
+        let good_root = name.replace('-', "__");
+        String::from_utf8_lossy(&output)
+            .replace(&bad_root, &good_root)
+            .into_bytes()
+    } else {
+        output
+    };
+
+    stdout
+        .write_all(&output)
+        .expect("writing shell completions to stdout should succeed");
 }
 
 fn print_man(stdout: &mut impl Write) {
