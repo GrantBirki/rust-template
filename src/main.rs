@@ -4,7 +4,7 @@ use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
 use clap_complete::{Shell, generate};
 use clap_mangen::Man;
 use rust_template::{add, greet, subtract, version_info};
-use std::io;
+use std::io::{self, Write};
 
 #[derive(Parser)]
 #[command(
@@ -62,29 +62,28 @@ impl CompletionShell {
     }
 }
 
-fn main() -> io::Result<()> {
+fn main() {
     let cli = Cli::parse();
+    let mut stdout = io::stdout();
 
     match cli.command {
         Some(Commands::Add { a, b }) => println!("{}", add(a, b)),
         Some(Commands::Sub { a, b }) => println!("{}", subtract(a, b)),
         Some(Commands::Version) => println!("{}", version_info().render()),
-        Some(Commands::Completions { shell }) => print_completions(shell),
-        Some(Commands::Man) => print_man()?,
+        Some(Commands::Completions { shell }) => print_completions(shell, &mut stdout),
+        Some(Commands::Man) => print_man(&mut stdout),
         None => println!("{}", greet(&cli.name, cli.shout, cli.times)),
     }
-
-    Ok(())
 }
 
-fn print_completions(shell: CompletionShell) {
+fn print_completions(shell: CompletionShell, stdout: &mut impl Write) {
     let mut cmd = Cli::command();
     let name = cmd.get_name().to_string();
-    generate(shell.as_shell(), &mut cmd, name, &mut io::stdout());
+    generate(shell.as_shell(), &mut cmd, name, stdout);
 }
 
-fn print_man() -> io::Result<()> {
+fn print_man(stdout: &mut impl Write) {
     let cmd = Cli::command();
     let man = Man::new(cmd);
-    man.render(&mut io::stdout())
+    man.render(stdout).expect("failed to render man page");
 }

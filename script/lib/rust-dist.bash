@@ -14,7 +14,7 @@ RUST_DIST_TARGETS=(
   "aarch64-apple-darwin"
 )
 
-RUST_DIST_HOST_COMPONENTS=("rustc" "cargo" "rustfmt" "clippy")
+RUST_DIST_HOST_COMPONENTS=("rustc" "cargo" "rustfmt" "clippy" "llvm-tools-preview")
 
 rust_dist_manifest_url() {
   local version="$1"
@@ -124,6 +124,7 @@ component_packages = {
     "rust-std": ("rust-std",),
     "rustfmt": ("rustfmt", "rustfmt-preview"),
     "clippy": ("clippy", "clippy-preview"),
+    "llvm-tools-preview": ("llvm-tools", "llvm-tools-preview"),
 }
 
 
@@ -151,7 +152,7 @@ def artifact(component, target):
 
 
 for host in hosts:
-    for component in ("rustc", "cargo", "rustfmt", "clippy"):
+    for component in ("rustc", "cargo", "rustfmt", "clippy", "llvm-tools-preview"):
         url, sha256 = artifact(component, host)
         print("|".join(("host", component, host, url, sha256)))
 

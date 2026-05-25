@@ -7,69 +7,71 @@ source script/env "$@"
 ensure_rust_toolchain
 
 script/validate-release-tools
+script/validate-test-tools
 
-# unless the --coverage or -c or --cov flag is passed, skip coverage and only run `cargo test`
-if [[ "${1:-}" != "--coverage" && "${1:-}" != "-c" && "${1:-}" != "--cov" ]]; then
+case "${1:-}" in
+  "" )
+    ;;
+  --coverage|--cov|-c)
+    ;;
+  *)
+    die "usage: script/test [--coverage|--cov|-c]"
+    ;;
+esac
+
+if [[ -z "${1:-}" ]]; then
   cargo test --frozen
-  exit $?
+  exit 0
 fi
 
-# Create coverage directory if it doesn't exist
 mkdir -p "$DIR/coverage"
 
-# Coverage mode requires preinstalled tools (no network installs).
 if ! command -v cargo-llvm-cov >/dev/null 2>&1; then
-  echo "cargo-llvm-cov is required for coverage runs." >&2
-  echo "Coverage is optional; provision cargo-llvm-cov outside normal offline workflows." >&2
-  exit 1
+  die "cargo-llvm-cov is required for coverage runs; run script/install-test-tools first"
 fi
 
 if command -v rustup >/dev/null 2>&1; then
-  if ! rustup component list --installed | grep -qx "llvm-tools-preview"; then
-    echo "rustup component llvm-tools-preview is required for coverage runs." >&2
-    echo "Coverage is optional; provision llvm-tools-preview outside normal offline workflows." >&2
-    exit 1
+  if ! rustup component list --installed | grep -Eq '^llvm-tools(-preview)?($|-)'; then
+    die "rustup component llvm-tools-preview is required for coverage runs; run script/prepare-rust first"
   fi
 fi
 
-# run coverage
 echo -e "\n🧪 ${BLUE}Running coverage: $(date "+%H:%M:%S")${OFF}\n"
 
-cov_exit=0
 lcov_path="$DIR/coverage/lcov.info"
+json_path="$DIR/coverage/coverage.json"
+text_path="$DIR/coverage/coverage.txt"
 html_dir="$DIR/coverage/html"
 
-rm -f "$lcov_path"
+rm -f "$lcov_path" "$json_path" "$text_path" "$DIR/coverage/total-coverage.txt"
 rm -rf "$html_dir"
 
-cargo llvm-cov --frozen --workspace --all-features \
-  --lcov --output-path "$lcov_path" \
-  --html --output-dir "$html_dir" \
-  --ignore-filename-regex '(^|/)(tests|benches|target|vendor)/|/\.cargo/registry/|/rustc/' \
-  && cov_exit=$? || cov_exit=$?
+ignore_regex='(^|/)(tests|benches|target|vendor)/|/\.cargo/registry/|/rustc/'
 
-if [[ -f "$lcov_path" ]]; then
-  lines_total=$(awk -F: '/^LF:/ {sum += $2} END {print sum+0}' "$lcov_path")
-  lines_hit=$(awk -F: '/^LH:/ {sum += $2} END {print sum+0}' "$lcov_path")
-  if [[ "$lines_total" -gt 0 ]]; then
-    coverage_value=$(awk -v hit="$lines_hit" -v total="$lines_total" 'BEGIN {printf "%.1f", (hit/total)*100}')
-    formatted_coverage="${coverage_value}%"
-    echo "$formatted_coverage" > "$DIR/coverage/total-coverage.txt"
-    if awk -v value="$coverage_value" 'BEGIN {exit !(value >= 100.0)}'; then
-      cov_exit=0
-      echo -e "\n✅ Total Coverage: ${GREEN}$formatted_coverage${OFF}"
-    else
-      cov_exit=1
-      echo -e "\n❌ ${RED}Total Coverage: $formatted_coverage (must be 100%)${OFF}"
-    fi
-  else
-    cov_exit=1
-    echo -e "\n❌ ${RED}Coverage report missing line counts${OFF}"
-  fi
-else
-  cov_exit=1
-  echo -e "\n❌ ${RED}Coverage report not found!${OFF}"
+cargo llvm-cov clean --workspace
+cargo llvm-cov --frozen --workspace --all-features --no-report
+
+cargo llvm-cov report \
+  --text --output-path "$text_path" \
+  --ignore-filename-regex "$ignore_regex" \
+  --fail-under-lines 100 \
+  --fail-under-functions 100 \
+  --fail-under-regions 100
+
+cargo llvm-cov report --lcov --output-path "$lcov_path" \
+  --ignore-filename-regex "$ignore_regex"
+cargo llvm-cov report --json --summary-only --output-path "$json_path" \
+  --ignore-filename-regex "$ignore_regex"
+cargo llvm-cov report --html --output-dir "$html_dir" \
+  --ignore-filename-regex "$ignore_regex"
+
+lines_total="$(awk -F: '/^LF:/ {sum += $2} END {print sum+0}' "$lcov_path")"
+lines_hit="$(awk -F: '/^LH:/ {sum += $2} END {print sum+0}' "$lcov_path")"
+if [[ "$lines_total" -le 0 ]]; then
+  die "coverage report missing line counts"
 fi
 
-[ $cov_exit -gt 0 ] && exit 1
-exit 0
+coverage_value="$(awk -v hit="$lines_hit" -v total="$lines_total" 'BEGIN {printf "%.1f", (hit/total)*100}')"
+echo "${coverage_value}%" > "$DIR/coverage/total-coverage.txt"
+
+echo -e "\n✅ Coverage: ${GREEN}${coverage_value}% lines, functions, and regions met the 100% gate${OFF}"

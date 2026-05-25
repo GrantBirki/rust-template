@@ -16,7 +16,7 @@ script/validate-rust-toolchain --ci
 # This script is the intentional online Rust preparation path.
 unset CARGO_NET_OFFLINE
 
-install_args=(toolchain install "$expected" --profile minimal --component rustfmt --component clippy)
+install_args=(toolchain install "$expected" --profile minimal --component rustfmt --component clippy --component llvm-tools-preview)
 targets_csv="${PREPARE_RUST_TARGETS:-${VERIFY_RUST_TARGETS:-}}"
 if [[ -n "$targets_csv" ]]; then
   IFS=',' read -r -a targets <<< "$targets_csv"
@@ -33,6 +33,9 @@ refresh_rust_version
 ensure_rust_toolchain
 cargo fmt --version >/dev/null
 cargo clippy --version >/dev/null
+if ! rustup component list --installed | grep -Eq '^llvm-tools(-preview)?($|-)'; then
+  die "llvm-tools-preview component was not installed after preparation"
+fi
 
 if [[ -n "$targets_csv" ]]; then
   sysroot="$(rustc --print sysroot 2>/dev/null || true)"

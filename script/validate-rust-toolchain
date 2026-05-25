@@ -96,8 +96,8 @@ while IFS='|' read -r kind component target url sha256; do
   fi
 done < <(rust_dist_artifact_entries "$rust_lockfile")
 
-if [[ "$artifact_count" -ne 20 ]]; then
-  die "expected 20 Rust artifact lock entries, found $artifact_count"
+if [[ "$artifact_count" -ne 24 ]]; then
+  die "expected 24 Rust artifact lock entries, found $artifact_count"
 fi
 
 if [[ "$online" == "true" ]]; then
