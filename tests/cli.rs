@@ -49,11 +49,14 @@ fn subtracts_numbers() {
 #[test]
 fn prints_extended_version_metadata() {
     let output = stdout(&run(&["version"]));
+    let build_version = option_env!("BUILD_VERSION").unwrap_or(env!("CARGO_PKG_VERSION"));
+    let commit = option_env!("BUILD_COMMIT").unwrap_or("unknown");
+    let build_date = option_env!("BUILD_DATE").unwrap_or("unknown");
 
     assert!(output.contains(&format!("rust-template {}", env!("CARGO_PKG_VERSION"))));
-    assert!(output.contains(&format!("build: {}", env!("CARGO_PKG_VERSION"))));
-    assert!(output.contains("commit: unknown"));
-    assert!(output.contains("built: unknown"));
+    assert!(output.contains(&format!("build: {build_version}")));
+    assert!(output.contains(&format!("commit: {commit}")));
+    assert!(output.contains(&format!("built: {build_date}")));
 }
 
 #[test]
