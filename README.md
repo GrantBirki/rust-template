@@ -7,6 +7,8 @@
 
 A starter template for Rust projects.
 
+![rust-template](./docs/assets/rust-template.png)
+
 ## Features
 
 - Full dependency vendoring
