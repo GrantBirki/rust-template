@@ -114,6 +114,9 @@ require_generated_path() {
     ""|/|"$DIR"|"${HOME:-__unset__}"|/tmp|/private/tmp|/var/tmp|"${RUNNER_TEMP:-__unset__}"|"${TMPDIR:-__unset__}")
       die "refusing to manage unsafe ${description}: ${path:-empty}"
       ;;
+    ..|../*|*/..|*/../*)
+      die "${description} must not contain .. path components: $path"
+      ;;
   esac
 
   if ! generated_path_allowed "$path"; then
