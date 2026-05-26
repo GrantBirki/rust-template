@@ -111,7 +111,7 @@ require_generated_path() {
   local description="$2"
 
   case "$path" in
-    ""|/|"$DIR"|"$HOME"|/tmp|/private/tmp|/var/tmp|"${RUNNER_TEMP:-__unset__}"|"${TMPDIR:-__unset__}")
+    ""|/|"$DIR"|"${HOME:-__unset__}"|/tmp|/private/tmp|/var/tmp|"${RUNNER_TEMP:-__unset__}"|"${TMPDIR:-__unset__}")
       die "refusing to manage unsafe ${description}: ${path:-empty}"
       ;;
   esac
