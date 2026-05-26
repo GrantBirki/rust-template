@@ -227,7 +227,12 @@ if [[ -z "$dist_dir" || "$dist_dir" == "/" ]]; then
 fi
 case "$dist_dir" in
   /*) ;;
-  *) dist_dir="$DIR/$dist_dir" ;;
+  *)
+    while [[ "$dist_dir" == ./* ]]; do
+      dist_dir="${dist_dir#./}"
+    done
+    dist_dir="$DIR/$dist_dir"
+    ;;
 esac
 
 clear_generated_dir "$dist_dir" "dist directory"
