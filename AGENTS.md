@@ -42,6 +42,7 @@ The template is meant to be copied into services, CLIs, and libraries that must 
 - `Cargo.lock` is committed and treated as source of truth.
 - Vendored crates live in `vendor/cache` and are required for offline builds.
 - Local non-CI scripts should prefer ignored repo-local temp roots such as `target/tmp` for Rust, Zig, Cargo, and release-tool scratch artifacts. Respect caller-provided `TMPDIR` and `RUNNER_TEMP`.
+- Cleanup paths for generated directories should use shared helpers from `script/lib/common.bash` instead of open-coded `rm -rf`.
 - `rust-toolchain.toml`, `.rust-version`, `Cargo.toml` `rust-version`, `.cargo/tooling/rust-toolchain.lock.toml`, `.cargo/tooling/zig-version`, `.cargo/tooling/cargo-zigbuild-version`, `.cargo/tooling/cargo-llvm-cov-version`, `.cargo/tooling/cargo-audit-version`, `.cargo/tooling/cargo-deny-version`, `.cargo/tooling/update-tools.lock.toml`, `.cargo/tooling/release-tools.lock.toml`, `.cargo/tooling/test-tools.lock.toml`, `vendor/release-tools/manifest.toml`, and `vendor/test-tools/manifest.toml` must stay consistent with actual supported tools.
 - GitHub Actions must be pinned to full commit SHAs.
 - Checkout steps should use `persist-credentials: false` unless a job explicitly needs credentials persisted.
@@ -88,6 +89,7 @@ All scripts live in `script/` and should use `set -euo pipefail` unless there is
   - Sources `script/lib/common.bash`; domain-specific scripts may also source focused helpers under `script/lib/`.
   - Exports offline Cargo defaults and disables rustup proxy auto-installation.
   - Outside CI, defaults `RUNNER_TEMP` and `TMPDIR` to `target/tmp` unless the caller already set them.
+  - In CI, defaults an unset `RUNNER_TEMP` to `TMPDIR` or `target/tmp` for tool installs and lookups.
   - Defines `DIR`, `VENDOR_DIR`, Rust toolchain checks, vendor checks, and common `die`/`warn` helpers.
   - Do not add network behavior here.
 
@@ -125,6 +127,7 @@ All scripts live in `script/` and should use `set -euo pipefail` unless there is
   - Cross builds require matching `zig` and `cargo-zigbuild`, normally installed by `script/install-zig` from committed release-tool artifacts.
   - Tool version mismatches must fail, not warn.
   - Uses `SOURCE_DATE_EPOCH` when provided for reproducible build metadata.
+  - `--dist-dir` is for generated artifact directories; unsafe roots and unrelated source directories must be rejected.
 
 - `script/server`
   - Runs the CLI/app through `cargo run --frozen`.

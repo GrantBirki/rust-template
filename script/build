@@ -225,12 +225,17 @@ export BUILD_DATE="$build_date"
 if [[ -z "$dist_dir" || "$dist_dir" == "/" ]]; then
   die "invalid dist directory: ${dist_dir}"
 fi
+case "$dist_dir" in
+  /*) ;;
+  *)
+    while [[ "$dist_dir" == ./* ]]; do
+      dist_dir="${dist_dir#./}"
+    done
+    dist_dir="$DIR/$dist_dir"
+    ;;
+esac
 
-if [[ -d "$dist_dir" ]]; then
-  rm -rf "$dist_dir"/*
-else
-  mkdir -p "$dist_dir"
-fi
+clear_generated_dir "$dist_dir" "dist directory"
 
 for target in "${targets[@]}"; do
   if [[ -z "$target" ]]; then

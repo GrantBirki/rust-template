@@ -15,11 +15,6 @@ export CARGO_NET_OFFLINE=true
 export RUSTUP_OFFLINE=1
 export RUSTUP_AUTO_INSTALL=0
 
-# set RUST_ENV to development (as a default) if not set
-: "${RUST_ENV:=development}"
-
-export RUST_ENV
-
 # set the working directory to the root of the project
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && cd .. && pwd )"
 export DIR
@@ -83,12 +78,13 @@ if [[ "${CI:-}" != "true" ]]; then
   export RUNNER_TEMP TMPDIR
 fi
 
-# The name of the repository is the name of the directory (usually)
-REPO_NAME=$(basename "$PWD")
-export REPO_NAME
+: "${RUNNER_TEMP:=${TMPDIR:-$DIR/target/tmp}}"
+mkdir -p "$RUNNER_TEMP"
+export RUNNER_TEMP
 
-TARBALL_DIR="$DIR/tarballs"
-export TARBALL_DIR
+# The name of the repository is the project root directory name.
+REPO_NAME=$(basename "$DIR")
+export REPO_NAME
 
 RUST_TOOLCHAIN_VERSION="$(rust_toolchain_version || true)"
 RUST_HOST_TRIPLE="$(rust_host_triple)"
@@ -150,9 +146,9 @@ case "$zig_arch" in
 esac
 
 if [[ -n "$ZIG_VERSION" && "$PLATFORM" != "unknown" ]]; then
-  ZIG_ROOT="${RUNNER_TEMP:-/tmp}/zig-${zig_arch}-${PLATFORM}-${ZIG_VERSION}"
-  : "${ZIG_GLOBAL_CACHE_DIR:=${RUNNER_TEMP:-/tmp}/zig-cache-${ZIG_VERSION}/global}"
-  : "${ZIG_LOCAL_CACHE_DIR:=${RUNNER_TEMP:-/tmp}/zig-cache-${ZIG_VERSION}/local}"
+  ZIG_ROOT="$RUNNER_TEMP/zig-${zig_arch}-${PLATFORM}-${ZIG_VERSION}"
+  : "${ZIG_GLOBAL_CACHE_DIR:=$RUNNER_TEMP/zig-cache-${ZIG_VERSION}/global}"
+  : "${ZIG_LOCAL_CACHE_DIR:=$RUNNER_TEMP/zig-cache-${ZIG_VERSION}/local}"
   mkdir -p "$ZIG_GLOBAL_CACHE_DIR" "$ZIG_LOCAL_CACHE_DIR"
   if [[ -d "$ZIG_ROOT" ]]; then
     case ":$PATH:" in
@@ -168,8 +164,8 @@ else
 fi
 
 if [[ -n "$CARGO_ZIGBUILD_VERSION" ]]; then
-  CARGO_ZIGBUILD_ROOT="${RUNNER_TEMP:-/tmp}/cargo-zigbuild-${CARGO_ZIGBUILD_VERSION}"
-  : "${CARGO_ZIGBUILD_CACHE_DIR:=${RUNNER_TEMP:-/tmp}/cargo-zigbuild-cache-${CARGO_ZIGBUILD_VERSION}}"
+  CARGO_ZIGBUILD_ROOT="$RUNNER_TEMP/cargo-zigbuild-${CARGO_ZIGBUILD_VERSION}"
+  : "${CARGO_ZIGBUILD_CACHE_DIR:=$RUNNER_TEMP/cargo-zigbuild-cache-${CARGO_ZIGBUILD_VERSION}}"
   if [[ -d "$CARGO_ZIGBUILD_ROOT/bin" ]]; then
     case ":$PATH:" in
       *":$CARGO_ZIGBUILD_ROOT/bin:"*) ;;
@@ -188,7 +184,7 @@ else
 fi
 
 if [[ -n "$CARGO_LLVM_COV_VERSION" ]]; then
-  CARGO_LLVM_COV_ROOT="${RUNNER_TEMP:-/tmp}/cargo-llvm-cov-${CARGO_LLVM_COV_VERSION}"
+  CARGO_LLVM_COV_ROOT="$RUNNER_TEMP/cargo-llvm-cov-${CARGO_LLVM_COV_VERSION}"
   if [[ -d "$CARGO_LLVM_COV_ROOT/bin" ]]; then
     case ":$PATH:" in
       *":$CARGO_LLVM_COV_ROOT/bin:"*) ;;

@@ -40,6 +40,8 @@ The normal project workflow uses checksum-gated online Rust preparation, then ru
 
 Outside CI, shared script setup defaults `RUNNER_TEMP` and `TMPDIR` to the ignored repo-local `target/tmp` directory when the caller has not already set them, so disposable Rust, Zig, Cargo, and release-tool scratch artifacts stay near the working tree.
 
+Generated-directory cleanup is guarded in shared script helpers so build, vendoring, and tool-install paths do not accidentally remove broad roots or unrelated source directories.
+
 GitHub-hosted `lint`, `test`, PR `build`, and release build jobs run `script/validate-locks --ci`, then `script/prepare-rust`, then enter the normal offline script surface. Hosted runners are not fully air-gapped infrastructure. Checkout, action loading, Rust preparation, artifact upload, release publication, and attestation verification still use networked platform services.
 
 Release build jobs install Zig and `cargo-zigbuild` from committed artifacts under `vendor/release-tools`. Zig is kept as upstream `.tar.xz` archives. `cargo-zigbuild` source and vendored dependencies are kept as deterministic `.tar.gz` archives that CI verifies and expands under `${RUNNER_TEMP}`. Those artifacts are refreshed only by `script/vendor-release-tools`, which is intentionally online-only. Upstream release-tool URLs and checksums are locked in `.cargo/tooling/release-tools.lock.toml`; the generated committed-artifact inventory lives in `vendor/release-tools/manifest.toml`.
