@@ -44,7 +44,7 @@ if [[ "$actual_sha256" != "$artifact_sha256" ]]; then
 fi
 validate_tar_entries "$artifact" z
 
-tmp_root="$(make_temp_dir rust-template-cargo-llvm-cov "${RUNNER_TEMP:-/tmp}")"
+tmp_root="$(make_temp_dir rust-template-cargo-llvm-cov "$RUNNER_TEMP")"
 cleanup() {
   remove_generated_path "$tmp_root" "temporary cargo-llvm-cov extraction directory"
 }
@@ -55,7 +55,7 @@ if [[ ! -x "$tmp_root/cargo-llvm-cov" ]]; then
   die "vendored cargo-llvm-cov artifact did not contain expected executable"
 fi
 
-cargo_llvm_cov_root="${RUNNER_TEMP:-/tmp}/cargo-llvm-cov-${cargo_llvm_cov_version}"
+cargo_llvm_cov_root="$RUNNER_TEMP/cargo-llvm-cov-${cargo_llvm_cov_version}"
 remove_generated_path "$cargo_llvm_cov_root" "cargo-llvm-cov install root"
 mkdir -p "$cargo_llvm_cov_root/bin"
 cp "$tmp_root/cargo-llvm-cov" "$cargo_llvm_cov_root/bin/cargo-llvm-cov"

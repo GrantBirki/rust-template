@@ -89,6 +89,7 @@ All scripts live in `script/` and should use `set -euo pipefail` unless there is
   - Sources `script/lib/common.bash`; domain-specific scripts may also source focused helpers under `script/lib/`.
   - Exports offline Cargo defaults and disables rustup proxy auto-installation.
   - Outside CI, defaults `RUNNER_TEMP` and `TMPDIR` to `target/tmp` unless the caller already set them.
+  - In CI, defaults an unset `RUNNER_TEMP` to `TMPDIR` or `target/tmp` for tool installs and lookups.
   - Defines `DIR`, `VENDOR_DIR`, Rust toolchain checks, vendor checks, and common `die`/`warn` helpers.
   - Do not add network behavior here.
 
