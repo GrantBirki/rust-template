@@ -34,7 +34,7 @@ restore_config() {
 tmp_vendor=""
 cleanup() {
   if [[ -n "$tmp_vendor" && -d "$tmp_vendor" ]]; then
-    rm -rf "$tmp_vendor"
+    remove_generated_path "$tmp_vendor" "temporary vendor directory"
   fi
   restore_config
 }
@@ -50,7 +50,7 @@ if [[ -z "$VENDOR_DIR" || "$VENDOR_DIR" == "/" ]]; then
 fi
 tmp_vendor="$(make_temp_dir rust-template-vendor)"
 cargo vendor --locked --versioned-dirs "$tmp_vendor"
-rm -rf "$VENDOR_DIR"
+remove_generated_path "$VENDOR_DIR" "vendor cache"
 mkdir -p "$VENDOR_DIR"
 mv "$tmp_vendor"/* "$VENDOR_DIR"/
 rmdir "$tmp_vendor"

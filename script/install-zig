@@ -61,7 +61,7 @@ validate_tar_entries "$zig_tarball" J
 
 tmp_root="$(make_temp_dir rust-template-zig "${RUNNER_TEMP:-/tmp}")"
 cleanup() {
-  rm -rf "$tmp_root"
+  remove_generated_path "$tmp_root" "temporary Zig extraction directory"
 }
 trap cleanup EXIT
 
@@ -72,7 +72,7 @@ if [[ ! -x "$extracted/zig" ]]; then
 fi
 
 zig_root="${RUNNER_TEMP:-/tmp}/zig-${zig_arch}-${zig_os}-${zig_version}"
-rm -rf "$zig_root"
+remove_generated_path "$zig_root" "Zig install root"
 mv "$extracted" "$zig_root"
 
 if [[ -n "${GITHUB_PATH:-}" ]]; then
@@ -124,7 +124,7 @@ validate_tar_entries "$cargo_source_archive" z
 validate_tar_entries "$cargo_vendor_archive" z
 
 cargo_extract_root="${RUNNER_TEMP:-/tmp}/cargo-zigbuild-extract-${cargo_zigbuild_version}"
-rm -rf "$cargo_extract_root"
+remove_generated_path "$cargo_extract_root" "cargo-zigbuild extraction root"
 mkdir -p "$cargo_extract_root"
 
 tar -xzf "$cargo_source_archive" -C "$cargo_extract_root"
@@ -145,7 +145,9 @@ cargo_zigbuild_root="${RUNNER_TEMP:-/tmp}/cargo-zigbuild-${cargo_zigbuild_versio
 cargo_zigbuild_target="${RUNNER_TEMP:-/tmp}/cargo-zigbuild-target-${cargo_zigbuild_version}"
 cargo_zigbuild_home="${RUNNER_TEMP:-/tmp}/cargo-zigbuild-home-${cargo_zigbuild_version}"
 
-rm -rf "$cargo_zigbuild_root" "$cargo_zigbuild_target" "$cargo_zigbuild_home"
+remove_generated_path "$cargo_zigbuild_root" "cargo-zigbuild install root"
+remove_generated_path "$cargo_zigbuild_target" "cargo-zigbuild target directory"
+remove_generated_path "$cargo_zigbuild_home" "cargo-zigbuild cargo home"
 mkdir -p "$cargo_zigbuild_root" "$cargo_zigbuild_target" "$cargo_zigbuild_home"
 export PATH="$cargo_zigbuild_root/bin:$PATH"
 

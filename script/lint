@@ -8,10 +8,24 @@ ensure_rust_toolchain
 
 FMT_FLAGS=(-- --check)
 case "${1:-}" in
+  "")
+    ;;
   --A|-A|-a|--a|--auto-fix)
     FMT_FLAGS=()
     ;;
+  -h|--help)
+    echo -e "${RED}usage:${OFF} script/lint [--auto-fix]" >&2
+    exit 0
+    ;;
+  *)
+    echo -e "${RED}usage:${OFF} script/lint [--auto-fix]" >&2
+    exit 2
+    ;;
 esac
+if [[ $# -gt 1 ]]; then
+  echo -e "${RED}usage:${OFF} script/lint [--auto-fix]" >&2
+  exit 2
+fi
 
 cargo fmt --all "${FMT_FLAGS[@]}"
 cargo clippy --frozen --all-targets --all-features -- -D warnings

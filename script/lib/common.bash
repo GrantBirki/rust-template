@@ -83,7 +83,59 @@ make_temp_dir() {
   local prefix="$1"
   local root="${2:-${TMPDIR:-/tmp}}"
 
+  mkdir -p "$root"
   mktemp -d "${root}/${prefix}.XXXXXX"
+}
+
+generated_path_allowed() {
+  local path="$1"
+
+  case "$path" in
+    "$DIR"/dist|"$DIR"/dist/*|"$DIR"/target/*|"$DIR"/vendor/cache|"$DIR"/vendor/release-tools|"$DIR"/vendor/test-tools)
+      return 0
+      ;;
+  esac
+
+  if [[ -n "${RUNNER_TEMP:-}" && "$path" == "$RUNNER_TEMP"/* ]]; then
+    return 0
+  fi
+  if [[ -n "${TMPDIR:-}" && "$path" == "$TMPDIR"/* ]]; then
+    return 0
+  fi
+
+  return 1
+}
+
+require_generated_path() {
+  local path="$1"
+  local description="$2"
+
+  case "$path" in
+    ""|/|"$DIR"|"$HOME"|/tmp|/private/tmp|/var/tmp|"${RUNNER_TEMP:-__unset__}"|"${TMPDIR:-__unset__}")
+      die "refusing to manage unsafe ${description}: ${path:-empty}"
+      ;;
+  esac
+
+  if ! generated_path_allowed "$path"; then
+    die "${description} must stay under repo-generated paths, RUNNER_TEMP, or TMPDIR: $path"
+  fi
+}
+
+remove_generated_path() {
+  local path="$1"
+  local description="$2"
+
+  require_generated_path "$path" "$description"
+  rm -rf "$path"
+}
+
+clear_generated_dir() {
+  local path="$1"
+  local description="$2"
+
+  require_generated_path "$path" "$description"
+  mkdir -p "$path"
+  find "$path" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
 }
 
 rust_target_installed() {

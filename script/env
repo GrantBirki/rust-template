@@ -15,11 +15,6 @@ export CARGO_NET_OFFLINE=true
 export RUSTUP_OFFLINE=1
 export RUSTUP_AUTO_INSTALL=0
 
-# set RUST_ENV to development (as a default) if not set
-: "${RUST_ENV:=development}"
-
-export RUST_ENV
-
 # set the working directory to the root of the project
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && cd .. && pwd )"
 export DIR
@@ -83,12 +78,9 @@ if [[ "${CI:-}" != "true" ]]; then
   export RUNNER_TEMP TMPDIR
 fi
 
-# The name of the repository is the name of the directory (usually)
-REPO_NAME=$(basename "$PWD")
+# The name of the repository is the project root directory name.
+REPO_NAME=$(basename "$DIR")
 export REPO_NAME
-
-TARBALL_DIR="$DIR/tarballs"
-export TARBALL_DIR
 
 RUST_TOOLCHAIN_VERSION="$(rust_toolchain_version || true)"
 RUST_HOST_TRIPLE="$(rust_host_triple)"
