@@ -23,7 +23,7 @@ jobs:
 
     steps:
       - name: checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # pin@v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # pin@v7.0.0
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -140,7 +140,7 @@ jobs:
 
     steps:
       - name: checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # pin@v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # pin@v7.0.0
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -168,7 +168,7 @@ jobs:
         run: script/build --release --targets "x86_64-unknown-linux-gnu,aarch64-unknown-linux-gnu"
 
       - name: upload artifact
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # pin@v7.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # pin@v7.0.1
         with:
           name: dist-linux
           path: dist/
@@ -187,7 +187,7 @@ jobs:
 
     steps:
       - name: checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # pin@v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # pin@v7.0.0
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -215,7 +215,7 @@ jobs:
         run: script/build --release --targets "x86_64-apple-darwin,aarch64-apple-darwin" --universal-darwin
 
       - name: upload artifact
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # pin@v7.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # pin@v7.0.1
         with:
           name: dist-macos
           path: dist/
@@ -342,7 +342,7 @@ jobs:
           gh release upload "$tag" "${files[@]}"
 
       - name: upload artifact
-        uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # pin@v7.0.0
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # pin@v7.0.1
         id: upload-artifact
         with:
           name: dist
