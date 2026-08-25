@@ -113,13 +113,13 @@ It also runs pinned `cargo-audit` and `cargo-deny` checks. Tool versions are pin
 
 Cargo Dependabot updates are intentionally disabled because dependency changes must include the lockfile and vendored crates. Use `script/update` for Cargo dependency refreshes.
 
-Rust toolchain updates are separate from application dependency updates:
+Rust toolchain updates are separate from application dependency updates. Set the same exact version in `rust-toolchain.toml`, `.rust-version`, and `Cargo.toml` (`rust-version`), then regenerate the distribution lock:
 
 ```console
 script/vendor-rust
 ```
 
-This refreshes `.cargo/tooling/rust-toolchain.lock.toml` from the official Rust channel manifest after verifying the manifest checksum. Review Rust toolchain updates by checking the Rust version files, upstream distribution URLs, checksums, and validation scripts.
+This refreshes `.cargo/tooling/rust-toolchain.lock.toml` from the official Rust channel manifest after verifying the manifest checksum. Dependabot toolchain PRs also require these companion updates before CI can pass. Review Rust toolchain updates by checking the Rust version files, upstream distribution URLs, checksums, and validation scripts.
 
 Update-tool lock refreshes are separate from application dependency updates:
 

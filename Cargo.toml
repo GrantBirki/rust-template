@@ -2,7 +2,7 @@
 name = "rust-template"
 version = "0.4.0"
 edition = "2024"
-rust-version = "1.95.0"
+rust-version = "1.97.1"
 
 authors = ["Grant Birkinbine"]
 license = "MIT"
