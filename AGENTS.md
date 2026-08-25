@@ -247,6 +247,8 @@ Keep these aligned:
 
 If any version file changes, update docs and verify the corresponding script behavior.
 
+For Rust toolchain PRs, including Dependabot updates, align `rust-toolchain.toml`, `.rust-version`, and `Cargo.toml` `rust-version`, then regenerate `.cargo/tooling/rust-toolchain.lock.toml` with `script/vendor-rust`. Do not hand-edit distribution checksums or relax the consistency checks to accept a partial update.
+
 ## CI Expectations
 
 - The `build` workflow is the PR-based release smoke test. It should validate locks, prepare Rust, install release tools, verify them, run `script/bootstrap`, and run `script/build --release`.
