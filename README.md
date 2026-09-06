@@ -40,6 +40,17 @@ The normal project workflow uses checksum-gated online Rust preparation, then ru
 
 Outside CI, shared script setup defaults `RUNNER_TEMP` and `TMPDIR` to the ignored repo-local `target/tmp` directory when the caller has not already set them, so disposable Rust, Zig, Cargo, and release-tool scratch artifacts stay near the working tree.
 
+Cargo normally writes build and test outputs under the workspace `target/` directory. `CARGO_TARGET_DIR`, Cargo configuration, or `--target-dir` can override that location. Keep disposable outputs gitignored. See [Cargo environment variables](https://doc.rust-lang.org/cargo/reference/environment-variables.html).
+
+An inherited `TMPDIR` (including the default exported by macOS) is already set, so the fallback above deliberately preserves it. To explicitly keep scratch files and Cargo outputs local for one test invocation, run this from the repository root:
+
+```bash
+mkdir -p target/tmp
+TMPDIR="$PWD/target/tmp" CARGO_TARGET_DIR="$PWD/target" script/test
+```
+
+The environment assignments apply to that command and its children. They do not change the parent shell or CI defaults. Editor test tasks need the same environment or must invoke the same command. `RUNNER_TEMP` still follows the existing caller/CI override rules.
+
 Generated-directory cleanup is guarded in shared script helpers so build, vendoring, and tool-install paths do not accidentally remove broad roots or unrelated source directories.
 
 GitHub-hosted `lint`, `test`, PR `build`, and release build jobs run `script/validate-locks --ci`, then `script/prepare-rust`, then enter the normal offline script surface. Hosted runners are not fully air-gapped infrastructure. Checkout, action loading, Rust preparation, artifact upload, release publication, and attestation verification still use networked platform services.

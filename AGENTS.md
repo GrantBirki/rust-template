@@ -60,6 +60,8 @@ Do not describe GitHub-hosted runners as fully air-gapped. They can validate off
 
 ## Local Artifact Placement
 
+An inherited macOS `TMPDIR` counts as caller-provided and must remain respected. The README documents explicit per-command `TMPDIR` and `CARGO_TARGET_DIR` assignments for local scratch and build output placement; preserve that opt-in and the existing CI behavior.
+
 Keep transient tool outputs close to the repo when reasonable.
 
 - Outside CI, `script/env` defaults `RUNNER_TEMP` and `TMPDIR` to `target/tmp` when the caller has not already set them.
