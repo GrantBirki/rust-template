@@ -209,3 +209,5 @@ Use `sha256sum -c checksums.txt` on systems where `sha256sum` is the standard ch
 
 - See `SECURITY.md` for the vulnerability reporting, dependency, offline, and release verification policy.
 - See `docs/repository-settings.md` for branch protection, Actions, CODEOWNERS, and protected release environment settings that must be configured in GitHub.
+
+GitHub Actions workflows set `cache-mode: none` to prevent dependency cache restores and saves. Committed vendored dependencies and uploaded build artifacts remain separate from the Actions cache.
