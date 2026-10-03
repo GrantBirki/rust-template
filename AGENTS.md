@@ -334,3 +334,7 @@ Use the smallest validation set that proves the change:
 - Release workflow changes: inspect YAML carefully and ensure release jobs still verify published release assets.
 
 If local validation is blocked by missing tools or a local toolchain issue, report the exact blocker instead of implying the repo passed.
+
+## Actions Cache Access
+
+GitHub Actions workflows set `cache-mode: none` to prevent dependency cache restores and saves. Committed vendored dependencies and uploaded build artifacts remain separate from the Actions cache.

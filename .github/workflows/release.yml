@@ -9,6 +9,8 @@ on:
 
 permissions: {}
 
+cache-mode: none
+
 jobs:
   prepare:
     if: github.repository == 'grantbirki/rust-template' # change this to your repository
